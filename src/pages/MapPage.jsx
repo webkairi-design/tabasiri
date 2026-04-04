@@ -50,6 +50,7 @@ function MapPage({ user, activeFilter }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
+  const userRef = useRef(user) // ← userをrefで管理（クリックイベント内で最新のuserを参照するため）
 
   const [posting, setPosting] = useState(false)
   const [clickedLatLng, setClickedLatLng] = useState(null)
@@ -60,21 +61,33 @@ function MapPage({ user, activeFilter }) {
   const [riderCard, setRiderCard] = useState(null)
   const [riderProfile, setRiderProfile] = useState(null)
 
+  // userが変わるたびにrefを更新
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
+
   useEffect(() => {
     if (mapInstanceRef.current) return
+
     const map = L.map(mapRef.current, { center: [36.5, 137.0], zoom: 6 })
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19,
     }).addTo(map)
+
+    // クリックイベントはuserRefを参照（常に最新のuserを取得できる）
     map.on('click', (e) => {
-      if (!user) return
-      setRiderCard(null); setRiderProfile(null)
+      if (!userRef.current) return
+      setRiderCard(null)
+      setRiderProfile(null)
       setClickedLatLng(e.latlng)
-      setComment(''); setPinType('now'); setCategory('other')
+      setComment('')
+      setPinType('now')
+      setCategory('other')
     })
+
     mapInstanceRef.current = map
     loadPins(map)
-  }, [user])
+  }, []) // ← 依存配列を空に。マップは一度だけ初期化
 
   useEffect(() => {
     if (!mapInstanceRef.current) return
@@ -117,7 +130,7 @@ function MapPage({ user, activeFilter }) {
   }
 
   async function postPin() {
-    if (!clickedLatLng || !user) return
+    if (!clickedLatLng || !userRef.current) return
     setPosting(true)
     let expiresAt = null
     if (pinType === 'now') {
@@ -126,7 +139,8 @@ function MapPage({ user, activeFilter }) {
       expiresAt = expires.toISOString()
     }
     const { data, error } = await supabase.from('pins').insert({
-      user_id: user.id, lat: clickedLatLng.lat, lng: clickedLatLng.lng,
+      user_id: userRef.current.id,
+      lat: clickedLatLng.lat, lng: clickedLatLng.lng,
       type: pinType, comment, category, expires_at: expiresAt,
     }).select().single()
     if (error) { console.error('投稿エラー:', error); setPosting(false); return }
@@ -192,7 +206,7 @@ function MapPage({ user, activeFilter }) {
         </div>
       )}
 
-      {/* ── 投稿パネル（ボトムシート型）── */}
+      {/* ── 投稿パネル ── */}
       {clickedLatLng && (
         <div style={{
           position: 'fixed', bottom: '0', left: '50%', transform: 'translateX(-50%)',
@@ -204,7 +218,6 @@ function MapPage({ user, activeFilter }) {
         }}>
           <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', margin: '0 auto 16px' }} />
 
-          {/* ピン種類 */}
           <div style={{ marginBottom: '14px' }}>
             <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>ピンの種類</div>
             <div style={{ display: 'flex', gap: '6px' }}>
@@ -225,7 +238,6 @@ function MapPage({ user, activeFilter }) {
             </div>
           </div>
 
-          {/* カテゴリ */}
           <div style={{ marginBottom: '14px' }}>
             <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>カテゴリ</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -272,7 +284,6 @@ function MapPage({ user, activeFilter }) {
         </div>
       )}
 
-      {/* 未ログイン時のヒント */}
       {!user && (
         <div style={{
           position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
