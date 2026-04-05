@@ -35,29 +35,30 @@ function App() {
         }}>読み込み中...</div>
       )}
 
-      {/* ── フィルターバー（上部中央・ズームボタンを避けるため左側に余白）── */}
+      {/* ── フィルターバー（常に上部中央・ログイン前後で変わらない）── */}
       <div style={{
         position: 'fixed',
         top: '16px',
-        left: '70px',           // ← ズームボタン分だけ右にずらす
-        right: user ? '220px' : '180px', // ← 右上ボタン分だけ左にずらす
+        left: '50%',
+        transform: 'translateX(-50%)',
         zIndex: 1000,
         display: 'flex',
         gap: '6px',
         background: 'rgba(20,20,20,0.85)',
         backdropFilter: 'blur(8px)',
-        padding: '6px 10px',
+        padding: '8px 12px',
         borderRadius: '40px',
         border: '1px solid rgba(255,255,255,0.1)',
         boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        maxWidth: 'calc(100vw - 32px)',
         overflowX: 'auto',
         flexShrink: 0,
-        // スクロールバー非表示
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
+        WebkitOverflowScrolling: 'touch',
       }}>
         <button onClick={() => setActiveFilter(null)} style={{
-          padding: '4px 10px', borderRadius: '20px', flexShrink: 0,
+          padding: '5px 12px', borderRadius: '20px', flexShrink: 0,
           border: activeFilter === null ? '1px solid white' : '1px solid rgba(255,255,255,0.2)',
           background: activeFilter === null ? 'white' : 'transparent',
           color: activeFilter === null ? '#111' : '#aaa',
@@ -72,7 +73,7 @@ function App() {
             <button key={cat.key}
               onClick={() => setActiveFilter(isActive ? null : cat.key)}
               style={{
-                padding: '4px 10px', borderRadius: '20px', flexShrink: 0,
+                padding: '5px 12px', borderRadius: '20px', flexShrink: 0,
                 border: isActive ? '1px solid white' : '1px solid rgba(255,255,255,0.2)',
                 background: isActive ? 'white' : 'transparent',
                 color: isActive ? '#111' : '#aaa',
@@ -85,7 +86,7 @@ function App() {
         })}
       </div>
 
-      {/* ── 右上ボタン（スマホではコンパクトに）── */}
+      {/* ── 右上ボタン ── */}
       {!loading && (
         <div style={{
           position: 'fixed', top: '16px', right: '12px', zIndex: 1000,
@@ -93,7 +94,6 @@ function App() {
         }}>
           {user ? (
             <>
-              {/* マイページボタン（アイコンのみ・小さく） */}
               <button onClick={() => setShowMyPage(true)} style={{
                 padding: '8px 12px',
                 background: 'rgba(255,69,0,0.9)',
@@ -101,8 +101,6 @@ function App() {
                 cursor: 'pointer', fontSize: '13px', fontFamily: 'sans-serif',
                 fontWeight: 'bold', whiteSpace: 'nowrap',
               }}>🏍️</button>
-
-              {/* ログアウトボタン */}
               <button onClick={signOut} style={{
                 padding: '8px 12px',
                 background: 'rgba(0,0,0,0.7)',
