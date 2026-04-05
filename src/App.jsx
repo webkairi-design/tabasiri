@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from './hooks/useAuth'
 import MapPage from './pages/MapPage'
 import MyPage from './pages/MyPage'
@@ -20,6 +20,13 @@ function App() {
   const { user, loading, signInWithGoogle, signOut } = useAuth()
   const [showMyPage, setShowMyPage] = useState(false)
   const [activeFilter, setActiveFilter] = useState(null)
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 600)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 600)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   return (
     <div style={{ position: 'relative' }}>
@@ -35,10 +42,10 @@ function App() {
         }}>読み込み中...</div>
       )}
 
-      {/* ── フィルターバー（常に上部中央・ログイン前後で変わらない）── */}
+      {/* ── フィルターバー ── */}
       <div style={{
         position: 'fixed',
-        top: '16px',
+        top: isMobile ? '64px' : '16px', // スマホは右上ボタンの下に配置
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 1000,
