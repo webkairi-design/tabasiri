@@ -109,3 +109,28 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ── スマホ対応（画面幅600px以下）── */
+@media (max-width: 600px) {
+
+  /* フィルターバーのスクロールバーを非表示 */
+  div[style*="translateX(-50%)"] {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  div[style*="translateX(-50%)"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 投稿パネルをフル幅に */
+  div[style*="360px"] {
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* ライダーカードをフル幅に */
+  div[style*="320px"] {
+    width: calc(100vw - 32px) !important;
+    box-sizing: border-box;
+  }
+}
