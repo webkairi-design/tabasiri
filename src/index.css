@@ -113,8 +113,9 @@ code {
 /* ── スマホ対応（画面幅600px以下）── */
 @media (max-width: 600px) {
 
-  /* フィルターバーのスクロールバーを非表示 */
+  /* フィルターバーを2行目に下げる（右上ボタンと重ならないように）*/
   div[style*="translateX(-50%)"] {
+    top: 64px !important;
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
