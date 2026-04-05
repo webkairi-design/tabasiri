@@ -51,6 +51,7 @@ function App() {
         border: '1px solid rgba(255,255,255,0.1)',
         boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
         overflowX: 'auto',
+        flexWrap: 'wrap',        // ← 追加：スマホで折り返す
         flexShrink: 0,
         // スクロールバー非表示
         scrollbarWidth: 'none',
