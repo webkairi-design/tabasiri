@@ -54,8 +54,11 @@ function MapPage({ user, activeFilter }) {
       attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19,
     }).addTo(map)
 
-    // ★ 変更：spiderfyOnMaxZoom: false を追加
-    const clusterGroup = L.markerClusterGroup({ spiderfyOnMaxZoom: false })
+    // ★ 変更：zoomToBoundsOnClick: false を追加
+    const clusterGroup = L.markerClusterGroup({
+      spiderfyOnMaxZoom: false,
+      zoomToBoundsOnClick: false,
+    })
     clusterGroup.addTo(map)
     clusterGroupRef.current = clusterGroup
 
