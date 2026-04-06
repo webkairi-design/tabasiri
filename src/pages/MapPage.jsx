@@ -30,7 +30,7 @@ function MapPage({ user, activeFilter }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
-  const clusterGroupRef = useRef(null) // ★ 追加：クラスターグループの参照
+  const clusterGroupRef = useRef(null)
   const userRef = useRef(user)
 
   const [posting, setPosting] = useState(false)
@@ -54,8 +54,8 @@ function MapPage({ user, activeFilter }) {
       attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19,
     }).addTo(map)
 
-    // ★ 追加：クラスターグループを作成して地図に追加
-    const clusterGroup = L.markerClusterGroup()
+    // ★ 変更：spiderfyOnMaxZoom: false を追加
+    const clusterGroup = L.markerClusterGroup({ spiderfyOnMaxZoom: false })
     clusterGroup.addTo(map)
     clusterGroupRef.current = clusterGroup
 
@@ -75,7 +75,6 @@ function MapPage({ user, activeFilter }) {
 
   useEffect(() => {
     if (!clusterGroupRef.current) return
-    // ★ 変更：map直接ではなくclusterGroup経由でフィルター
     markersRef.current.forEach(({ marker, pin }) => {
       if (activeFilter === null || pin.category === activeFilter) {
         clusterGroupRef.current.addLayer(marker)
@@ -103,7 +102,6 @@ function MapPage({ user, activeFilter }) {
       setClickedLatLng(null)
       openRiderCard(pin)
     })
-    // ★ 変更：map.addTo → clusterGroupRef.current.addLayer
     clusterGroupRef.current.addLayer(marker)
     markersRef.current.push({ marker, pin })
   }
@@ -149,7 +147,7 @@ function MapPage({ user, activeFilter }) {
 
     markersRef.current = markersRef.current.filter(({ marker, pin }) => {
       if (pin.id === riderCard.id) {
-        clusterGroupRef.current.removeLayer(marker) // ★ 変更：marker.remove() → removeLayer
+        clusterGroupRef.current.removeLayer(marker)
         return false
       }
       return true
