@@ -2,6 +2,9 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { supabase } from '../lib/supabase'
 import { CATEGORIES, PIN_TYPES, PIN_COLORS } from '../constants'
 
@@ -27,6 +30,7 @@ function MapPage({ user, activeFilter }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
+  const clusterGroupRef = useRef(null) // ★ 追加：クラスターグループの参照
   const userRef = useRef(user)
 
   const [posting, setPosting] = useState(false)
@@ -50,6 +54,11 @@ function MapPage({ user, activeFilter }) {
       attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19,
     }).addTo(map)
 
+    // ★ 追加：クラスターグループを作成して地図に追加
+    const clusterGroup = L.markerClusterGroup()
+    clusterGroup.addTo(map)
+    clusterGroupRef.current = clusterGroup
+
     map.on('click', (e) => {
       if (!userRef.current) return
       setRiderCard(null)
@@ -65,12 +74,13 @@ function MapPage({ user, activeFilter }) {
   }, [])
 
   useEffect(() => {
-    if (!mapInstanceRef.current) return
+    if (!clusterGroupRef.current) return
+    // ★ 変更：map直接ではなくclusterGroup経由でフィルター
     markersRef.current.forEach(({ marker, pin }) => {
       if (activeFilter === null || pin.category === activeFilter) {
-        marker.addTo(mapInstanceRef.current)
+        clusterGroupRef.current.addLayer(marker)
       } else {
-        marker.remove()
+        clusterGroupRef.current.removeLayer(marker)
       }
     })
   }, [activeFilter])
@@ -87,12 +97,14 @@ function MapPage({ user, activeFilter }) {
     const color = PIN_COLORS[pin.type] || '#888888'
     const cat = CATEGORIES.find(c => c.key === pin.category)
     const icon = createColorPin(color, cat ? cat.emoji : '')
-    const marker = L.marker([pin.lat, pin.lng], { icon }).addTo(map)
+    const marker = L.marker([pin.lat, pin.lng], { icon })
     marker.on('click', (e) => {
       L.DomEvent.stopPropagation(e)
       setClickedLatLng(null)
       openRiderCard(pin)
     })
+    // ★ 変更：map.addTo → clusterGroupRef.current.addLayer
+    clusterGroupRef.current.addLayer(marker)
     markersRef.current.push({ marker, pin })
   }
 
@@ -123,7 +135,6 @@ function MapPage({ user, activeFilter }) {
     setClickedLatLng(null); setComment(''); setPosting(false)
   }
 
-  // ── 削除処理（新規追加）──
   async function deletePin() {
     if (!riderCard) return
     const ok = window.confirm('本当に削除しますか？')
@@ -136,16 +147,14 @@ function MapPage({ user, activeFilter }) {
 
     if (error) { console.error('削除エラー:', error); return }
 
-    // 地図上のマーカーを消してmarkersRefからも除く
     markersRef.current = markersRef.current.filter(({ marker, pin }) => {
       if (pin.id === riderCard.id) {
-        marker.remove()
-        return false // 配列から除外
+        clusterGroupRef.current.removeLayer(marker) // ★ 変更：marker.remove() → removeLayer
+        return false
       }
-      return true   // それ以外は残す
+      return true
     })
 
-    // ライダーカードを閉じる
     setRiderCard(null)
     setRiderProfile(null)
   }
@@ -154,8 +163,6 @@ function MapPage({ user, activeFilter }) {
   const cardType = riderCard ? PIN_TYPES.find(t => t.key === riderCard.type) : null
   const cardColor = riderCard ? (PIN_COLORS[riderCard.type] || '#888') : '#888'
   const cardCat = riderCard ? CATEGORIES.find(c => c.key === riderCard.category) : null
-
-  // 自分のピンかどうかの判定
   const isMyPin = riderCard && user && riderCard.user_id === user.id
 
   return (
@@ -208,8 +215,6 @@ function MapPage({ user, activeFilter }) {
           <div style={{ fontSize: '11px', color: '#555', marginTop: '10px', textAlign: 'right' }}>
             {riderCard.lat.toFixed(4)}, {riderCard.lng.toFixed(4)}
           </div>
-
-          {/* ── 削除ボタン（自分のピンのみ表示・新規追加）── */}
           {isMyPin && (
             <button onClick={deletePin} style={{
               marginTop: '12px',
