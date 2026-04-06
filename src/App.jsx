@@ -1,7 +1,7 @@
 // src/App.jsx
 import { useState, useEffect } from 'react'
 import { useAuth } from './hooks/useAuth'
-import AppPC from './AppPC'
+import AppPC from './LayoutPC'
 import AppMobile from './AppMobile'
 
 function App() {
