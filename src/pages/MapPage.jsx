@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { supabase } from '../lib/supabase'
+import { CATEGORIES, PIN_TYPES, PIN_COLORS } from '../constants'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -10,30 +11,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
-
-const PIN_COLORS = {
-  now:     '#FF4500',
-  visited: '#00C853',
-  want:    '#2979FF',
-}
-
-const PIN_TYPES = [
-  { key: 'now',     label: '📍 今ここ',   desc: '24時間で自動消滅' },
-  { key: 'visited', label: '✅ 訪問済み', desc: 'ずっと残る'       },
-  { key: 'want',    label: '⭐ 行きたい', desc: 'ずっと残る'       },
-]
-
-const CATEGORIES = [
-  { key: 'michinoeki', label: '道の駅',   emoji: '🏪' },
-  { key: 'tenbodai',   label: '展望台',   emoji: '🗻' },
-  { key: 'onsen',      label: '温泉',     emoji: '♨️' },
-  { key: 'umi',        label: '海岸・湖', emoji: '🌊' },
-  { key: 'toge',       label: '峠・山道', emoji: '⛰️' },
-  { key: 'gourmet',    label: 'グルメ',   emoji: '🍜' },
-  { key: 'jinja',      label: '神社・寺', emoji: '⛩️' },
-  { key: 'kanko',      label: '観光地',   emoji: '📸' },
-  { key: 'other',      label: 'その他',   emoji: '📍' },
-]
 
 function createColorPin(color, emoji = '') {
   return L.divIcon({

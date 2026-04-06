@@ -1,19 +1,8 @@
-// src/AppPC.jsx
+// src/LayoutPC.jsx
 import { useState } from 'react'
 import MapPage from './pages/MapPage'
 import MyPage from './pages/MyPage'
-
-const CATEGORIES = [
-  { key: 'michinoeki', label: '道の駅',   emoji: '🏪' },
-  { key: 'tenbodai',   label: '展望台',   emoji: '🗻' },
-  { key: 'onsen',      label: '温泉',     emoji: '♨️' },
-  { key: 'umi',        label: '海岸・湖', emoji: '🌊' },
-  { key: 'toge',       label: '峠・山道', emoji: '⛰️' },
-  { key: 'gourmet',    label: 'グルメ',   emoji: '🍜' },
-  { key: 'jinja',      label: '神社・寺', emoji: '⛩️' },
-  { key: 'kanko',      label: '観光地',   emoji: '📸' },
-  { key: 'other',      label: 'その他',   emoji: '📍' },
-]
+import { CATEGORIES } from './constants'
 
 function AppPC({ user, loading, signInWithGoogle, signOut }) {
   const [showMyPage, setShowMyPage] = useState(false)
