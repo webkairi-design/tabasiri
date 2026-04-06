@@ -27,7 +27,7 @@ function MapPage({ user, activeFilter }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
-  const userRef = useRef(user) // ← userをrefで管理（クリックイベント内で最新のuserを参照するため）
+  const userRef = useRef(user)
 
   const [posting, setPosting] = useState(false)
   const [clickedLatLng, setClickedLatLng] = useState(null)
@@ -38,7 +38,6 @@ function MapPage({ user, activeFilter }) {
   const [riderCard, setRiderCard] = useState(null)
   const [riderProfile, setRiderProfile] = useState(null)
 
-  // userが変わるたびにrefを更新
   useEffect(() => {
     userRef.current = user
   }, [user])
@@ -51,7 +50,6 @@ function MapPage({ user, activeFilter }) {
       attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19,
     }).addTo(map)
 
-    // クリックイベントはuserRefを参照（常に最新のuserを取得できる）
     map.on('click', (e) => {
       if (!userRef.current) return
       setRiderCard(null)
@@ -64,7 +62,7 @@ function MapPage({ user, activeFilter }) {
 
     mapInstanceRef.current = map
     loadPins(map)
-  }, []) // ← 依存配列を空に。マップは一度だけ初期化
+  }, [])
 
   useEffect(() => {
     if (!mapInstanceRef.current) return
@@ -125,10 +123,40 @@ function MapPage({ user, activeFilter }) {
     setClickedLatLng(null); setComment(''); setPosting(false)
   }
 
+  // ── 削除処理（新規追加）──
+  async function deletePin() {
+    if (!riderCard) return
+    const ok = window.confirm('本当に削除しますか？')
+    if (!ok) return
+
+    const { error } = await supabase
+      .from('pins')
+      .delete()
+      .eq('id', riderCard.id)
+
+    if (error) { console.error('削除エラー:', error); return }
+
+    // 地図上のマーカーを消してmarkersRefからも除く
+    markersRef.current = markersRef.current.filter(({ marker, pin }) => {
+      if (pin.id === riderCard.id) {
+        marker.remove()
+        return false // 配列から除外
+      }
+      return true   // それ以外は残す
+    })
+
+    // ライダーカードを閉じる
+    setRiderCard(null)
+    setRiderProfile(null)
+  }
+
   const currentColor = PIN_COLORS[pinType]
   const cardType = riderCard ? PIN_TYPES.find(t => t.key === riderCard.type) : null
   const cardColor = riderCard ? (PIN_COLORS[riderCard.type] || '#888') : '#888'
   const cardCat = riderCard ? CATEGORIES.find(c => c.key === riderCard.category) : null
+
+  // 自分のピンかどうかの判定
+  const isMyPin = riderCard && user && riderCard.user_id === user.id
 
   return (
     <>
@@ -180,6 +208,22 @@ function MapPage({ user, activeFilter }) {
           <div style={{ fontSize: '11px', color: '#555', marginTop: '10px', textAlign: 'right' }}>
             {riderCard.lat.toFixed(4)}, {riderCard.lng.toFixed(4)}
           </div>
+
+          {/* ── 削除ボタン（自分のピンのみ表示・新規追加）── */}
+          {isMyPin && (
+            <button onClick={deletePin} style={{
+              marginTop: '12px',
+              width: '100%',
+              padding: '8px',
+              borderRadius: '8px',
+              border: '1px solid rgba(255, 59, 48, 0.4)',
+              background: 'rgba(255, 59, 48, 0.15)',
+              color: 'rgba(255, 59, 48, 0.8)',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontFamily: 'sans-serif',
+            }}>🗑️ このピンを削除</button>
+          )}
         </div>
       )}
 
