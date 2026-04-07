@@ -2,17 +2,45 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
+// メーカーリスト
+const MAKERS = [
+  'Honda', 'Yamaha', 'Kawasaki', 'Suzuki',
+  'BMW', 'Ducati', 'Triumph', 'Harley-Davidson',
+  'KTM', 'Royal Enfield', 'Aprilia', 'Moto Guzzi',
+  'Indian', 'Zero Motorcycles',
+  'その他',
+]
+
+// bike_model 文字列をメーカー・カスタムメーカー・車種名に分解する関数
+function parseBikeModel(bikeModel) {
+  if (!bikeModel) return { maker: '', customMaker: '', modelName: '' }
+
+  const parts = bikeModel.split(' ')
+  const firstWord = parts[0]
+  const rest = parts.slice(1).join(' ')
+
+  // メーカーリストに一致する場合
+  if (MAKERS.includes(firstWord) && firstWord !== 'その他') {
+    return { maker: firstWord, customMaker: '', modelName: rest }
+  }
+
+  // 一致しない場合は「その他」にしてメーカー名欄へ
+  return { maker: 'その他', customMaker: firstWord, modelName: rest }
+}
+
 function MyPage({ user, onClose }) {
   const [username, setUsername] = useState('')
-  const [bikeModel, setBikeModel] = useState('')
+  const [maker, setMaker] = useState('')           // ★ 追加：メーカー選択
+  const [customMaker, setCustomMaker] = useState('') // ★ 追加：その他のメーカー名
+  const [modelName, setModelName] = useState('')   // ★ 追加：車種名
   const [bio, setBio] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState(null)   // ★ 追加：アイコン画像URL
+  const [avatarUrl, setAvatarUrl] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)  // ★ 追加：アップロード中フラグ
-  const [iconHover, setIconHover] = useState(false)  // ★ 追加：ホバー状態
-  const fileInputRef = useRef(null)                  // ★ 追加：非表示のファイル入力
+  const [uploading, setUploading] = useState(false)
+  const [iconHover, setIconHover] = useState(false)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     async function loadProfile() {
@@ -20,9 +48,14 @@ function MyPage({ user, onClose }) {
         .from('profiles').select('*').eq('id', user.id).single()
       if (!error && data) {
         setUsername(data.username || '')
-        setBikeModel(data.bike_model || '')
         setBio(data.bio || '')
-        setAvatarUrl(data.avatar_url || null) // ★ 追加：avatar_urlをセット
+        setAvatarUrl(data.avatar_url || null)
+
+        // ★ 追加：bike_model をメーカー・車種名に分解してセット
+        const parsed = parseBikeModel(data.bike_model || '')
+        setMaker(parsed.maker)
+        setCustomMaker(parsed.customMaker)
+        setModelName(parsed.modelName)
       }
       setLoading(false)
     }
@@ -32,6 +65,11 @@ function MyPage({ user, onClose }) {
   async function saveProfile() {
     setSaving(true)
     setSaved(false)
+
+    // ★ 追加：メーカー＋車種名を結合して bike_model を生成
+    const makerPart = maker === 'その他' ? customMaker : maker
+    const bikeModel = [makerPart, modelName].filter(Boolean).join(' ')
+
     const { error } = await supabase
       .from('profiles')
       .update({ username, bike_model: bikeModel, bio })
@@ -42,18 +80,15 @@ function MyPage({ user, onClose }) {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  // ★ 追加：アイコン画像アップロード処理
   async function handleAvatarChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
 
     setUploading(true)
 
-    // ファイル名：{user.id}_{タイムスタンプ}.{拡張子}
     const ext = file.name.split('.').pop()
     const fileName = `${user.id}_${Date.now()}.${ext}`
 
-    // Supabase Storage の avatars バケットにアップロード
     const { error: uploadError } = await supabase.storage
       .from('avatars')
       .upload(fileName, file, { upsert: true })
@@ -64,14 +99,12 @@ function MyPage({ user, onClose }) {
       return
     }
 
-    // 公開URLを取得
     const { data: urlData } = supabase.storage
       .from('avatars')
       .getPublicUrl(fileName)
 
     const publicUrl = urlData.publicUrl
 
-    // profiles テーブルの avatar_url を更新
     const { error: updateError } = await supabase
       .from('profiles')
       .update({ avatar_url: publicUrl })
@@ -102,6 +135,7 @@ function MyPage({ user, onClose }) {
         borderRadius: '20px', padding: '32px',
         width: '360px', color: 'white', position: 'relative',
         boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
+        maxHeight: '90vh', overflowY: 'auto',
       }}>
         <button onClick={onClose} style={{
           position: 'absolute', top: '16px', right: '16px',
@@ -116,9 +150,8 @@ function MyPage({ user, onClose }) {
           {user.email}
         </div>
 
-        {/* ★ 追加：アイコン画像エリア */}
+        {/* アイコン画像エリア */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
-          {/* 非表示のファイル入力（jpg・png・webpのみ） */}
           <input
             ref={fileInputRef}
             type="file"
@@ -126,8 +159,6 @@ function MyPage({ user, onClose }) {
             onChange={handleAvatarChange}
             style={{ display: 'none' }}
           />
-
-          {/* アイコン丸エリア */}
           <div
             onClick={() => !uploading && fileInputRef.current?.click()}
             onMouseEnter={() => setIconHover(true)}
@@ -144,18 +175,12 @@ function MyPage({ user, onClose }) {
               flexShrink: 0,
             }}
           >
-            {/* 画像 or 絵文字 */}
             {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt="アイコン"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
+              <img src={avatarUrl} alt="アイコン"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <span style={{ fontSize: '32px' }}>🏍️</span>
             )}
-
-            {/* ホバー時オーバーレイ */}
             {(iconHover || uploading) && (
               <div style={{
                 position: 'absolute', inset: 0,
@@ -175,22 +200,53 @@ function MyPage({ user, onClose }) {
           <div style={{ color: '#888', textAlign: 'center', padding: '20px' }}>読み込み中...</div>
         ) : (
           <>
+            {/* ライダー名 */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{ fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '6px' }}>ライダー名</label>
               <input type="text" placeholder="例：カイリ" value={username}
                 onChange={(e) => setUsername(e.target.value)} style={inputStyle} />
             </div>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '6px' }}>バイク車種</label>
-              <input type="text" placeholder="例：CB400SF" value={bikeModel}
-                onChange={(e) => setBikeModel(e.target.value)} style={inputStyle} />
+
+            {/* ★ 変更：バイク車種を2段階に */}
+            {/* メーカー選択ドロップダウン */}
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '6px' }}>メーカー</label>
+              <select
+                value={maker}
+                onChange={(e) => setMaker(e.target.value)}
+                style={{ ...inputStyle, appearance: 'none', cursor: 'pointer' }}
+              >
+                <option value="" disabled style={{ background: '#1a1a1a' }}>選択してください</option>
+                {MAKERS.map((m) => (
+                  <option key={m} value={m} style={{ background: '#1a1a1a' }}>{m}</option>
+                ))}
+              </select>
             </div>
+
+            {/* その他を選んだ場合のみメーカー名入力欄を表示 */}
+            {maker === 'その他' && (
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '6px' }}>メーカー名</label>
+                <input type="text" placeholder="例：Bimota" value={customMaker}
+                  onChange={(e) => setCustomMaker(e.target.value)} style={inputStyle} />
+              </div>
+            )}
+
+            {/* 車種名テキスト入力 */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '6px' }}>車種名</label>
+              <input type="text" placeholder="例：CB400SF" value={modelName}
+                onChange={(e) => setModelName(e.target.value)} style={inputStyle} />
+            </div>
+
+            {/* 一言自己紹介 */}
             <div style={{ marginBottom: '24px' }}>
               <label style={{ fontSize: '12px', color: '#aaa', display: 'block', marginBottom: '6px' }}>一言自己紹介</label>
               <textarea placeholder="例：週末ライダーです。" value={bio}
                 onChange={(e) => setBio(e.target.value)} rows={3}
                 style={{ ...inputStyle, resize: 'vertical', minHeight: '72px' }} />
             </div>
+
             <button onClick={saveProfile} disabled={saving} style={{
               width: '100%', padding: '12px', borderRadius: '10px',
               border: 'none', background: saved ? '#00C853' : '#FF4500',
