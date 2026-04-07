@@ -29,42 +29,42 @@ function makeDummyRiders() {
       lat: 33.5902, lng: 130.4017,
       type: 'now', category: 'toge',
       created_at: new Date(now - 3   * 60000).toISOString(), // 3分前
-      profile: { username: 'タカハシ走郎', bike_model: 'Honda CB400SF' },
+      profile: { username: 'タカハシ走郎', bike_model: 'Honda CB400SF', avatar_url: null },
     },
     {
       id: 'dummy-2',
       lat: 35.6585, lng: 139.7454,
       type: 'visited', category: 'tenbodai',
       created_at: new Date(now - 18  * 60000).toISOString(), // 18分前
-      profile: { username: 'やまびこライダー', bike_model: 'Yamaha MT-09' },
+      profile: { username: 'やまびこライダー', bike_model: 'Yamaha MT-09', avatar_url: null },
     },
     {
       id: 'dummy-3',
       lat: 34.6937, lng: 135.5023,
       type: 'visited', category: 'onsen',
       created_at: new Date(now - 47  * 60000).toISOString(), // 47分前
-      profile: { username: 'ゆけむり旅人', bike_model: 'Kawasaki Z900RS' },
+      profile: { username: 'ゆけむり旅人', bike_model: 'Kawasaki Z900RS', avatar_url: null },
     },
     {
       id: 'dummy-4',
       lat: 43.0642, lng: 141.3469,
       type: 'now', category: 'michinoeki',
       created_at: new Date(now - 1.5 * 3600000).toISOString(), // 1.5時間前
-      profile: { username: '北海道ソロツー', bike_model: 'Suzuki V-Strom 650' },
+      profile: { username: '北海道ソロツー', bike_model: 'Suzuki V-Strom 650', avatar_url: null },
     },
     {
       id: 'dummy-5',
       lat: 35.3606, lng: 138.7274,
       type: 'want', category: 'kanko',
       created_at: new Date(now - 3   * 3600000).toISOString(), // 3時間前
-      profile: { username: 'フジゲン2輪', bike_model: 'BMW R1250GS' },
+      profile: { username: 'フジゲン2輪', bike_model: 'BMW R1250GS', avatar_url: null },
     },
     {
       id: 'dummy-6',
       lat: 26.2124, lng: 127.6792,
       type: 'visited', category: 'umi',
       created_at: new Date(now - 5   * 3600000).toISOString(), // 5時間前
-      profile: { username: '沖縄シーサイド', bike_model: 'Honda PCX160' },
+      profile: { username: '沖縄シーサイド', bike_model: 'Honda PCX160', avatar_url: null },
     },
   ]
 }
@@ -179,48 +179,71 @@ function AppPC({ user, loading, signInWithGoogle, signOut }) {
                   padding: '12px 16px',
                   borderBottom: '1px solid rgba(255,255,255,0.05)',
                   cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
+                  display: 'flex',         // ★ 横並びに変更
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: '10px',
                 }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
-                {/* 1行目：ライダー名 ＋ 相対時間 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'white', fontSize: '14px', fontWeight: 'bold' }}>
-                    {pin.profile?.username || 'ライダー'}
-                  </span>
-                  <span style={{ color: '#555', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}>
-                    {timeAgo(pin.created_at)}
-                  </span>
+                {/* ★ 追加：左端のアイコン（36px丸形） */}
+                <div style={{
+                  width: '36px', height: '36px',
+                  borderRadius: '50%',
+                  background: '#2a2a2a',
+                  border: `1px solid ${color}55`,
+                  flexShrink: 0,
+                  overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '18px',
+                }}>
+                  {pin.profile?.avatar_url
+                    ? <img src={pin.profile.avatar_url} alt="アイコン"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : '🏍️'
+                  }
                 </div>
 
-                {/* 2行目：バイク車種 */}
-                {pin.profile?.bike_model && (
-                  <div style={{ color: '#888', fontSize: '12px' }}>
-                    🏍️ {pin.profile.bike_model}
+                {/* 右側：既存のライダー情報 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                  {/* 1行目：ライダー名 ＋ 相対時間 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'white', fontSize: '14px', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pin.profile?.username || 'ライダー'}
+                    </span>
+                    <span style={{ color: '#555', fontSize: '11px', flexShrink: 0, marginLeft: '6px' }}>
+                      {timeAgo(pin.created_at)}
+                    </span>
                   </div>
-                )}
 
-                {/* 3行目：カテゴリ ＋ ピン種類（色付き） */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {cat && (
-                    <span style={{ color: '#aaa', fontSize: '12px' }}>
-                      {cat.emoji} {cat.label}
-                    </span>
+                  {/* 2行目：バイク車種 */}
+                  {pin.profile?.bike_model && (
+                    <div style={{ color: '#888', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      🏍️ {pin.profile.bike_model}
+                    </div>
                   )}
-                  {pinType && (
-                    <span style={{
-                      fontSize: '11px',
-                      color: color,
-                      border: `1px solid ${color}`,
-                      borderRadius: '10px',
-                      padding: '1px 7px',
-                    }}>
-                      {pinType.label}
-                    </span>
-                  )}
+
+                  {/* 3行目：カテゴリ ＋ ピン種類（色付き） */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {cat && (
+                      <span style={{ color: '#aaa', fontSize: '12px' }}>
+                        {cat.emoji} {cat.label}
+                      </span>
+                    )}
+                    {pinType && (
+                      <span style={{
+                        fontSize: '11px',
+                        color: color,
+                        border: `1px solid ${color}`,
+                        borderRadius: '10px',
+                        padding: '1px 7px',
+                        flexShrink: 0,
+                      }}>
+                        {pinType.label}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )
