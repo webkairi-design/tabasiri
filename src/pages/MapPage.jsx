@@ -26,7 +26,6 @@ function createColorPin(color, emoji = '') {
   })
 }
 
-// ★ 追加：onMapReady props を受け取る（地図インスタンスを親に渡すため）
 function MapPage({ user, activeFilter, onMapReady }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
@@ -75,7 +74,6 @@ function MapPage({ user, activeFilter, onMapReady }) {
     mapInstanceRef.current = map
     loadPins(map)
 
-    // ★ 追加：マップ初期化後に親へインスタンスを渡す
     if (onMapReady) onMapReady(map)
   }, [])
 
@@ -196,9 +194,24 @@ function MapPage({ user, activeFilter, onMapReady }) {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: riderProfile === null ? 'rgba(255,255,255,0.1)' : cardColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0, border: `2px solid ${cardColor}` }}>
-              {riderProfile !== null && '🏍️'}
+
+            {/* ── アイコン（★ avatar_url があれば画像、なければ🏍️絵文字）── */}
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '50%',
+              background: riderProfile === null ? 'rgba(255,255,255,0.1)' : cardColor,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '20px', flexShrink: 0,
+              border: `2px solid ${cardColor}`,
+              overflow: 'hidden',
+            }}>
+              {riderProfile === null ? null
+                : riderProfile.avatar_url
+                  ? <img src={riderProfile.avatar_url} alt="アイコン"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : '🏍️'
+              }
             </div>
+
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '15px' }}>
                 {riderProfile === null ? '読み込み中...' : (riderProfile.username || 'ライダー')}
