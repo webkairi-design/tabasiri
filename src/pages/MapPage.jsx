@@ -26,7 +26,8 @@ function createColorPin(color, emoji = '') {
   })
 }
 
-function MapPage({ user, activeFilter }) {
+// ★ 追加：onMapReady props を受け取る（地図インスタンスを親に渡すため）
+function MapPage({ user, activeFilter, onMapReady }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
@@ -54,7 +55,6 @@ function MapPage({ user, activeFilter }) {
       attribution: '© OpenStreetMap contributors © CARTO', subdomains: 'abcd', maxZoom: 19,
     }).addTo(map)
 
-    // ★ 変更：zoomToBoundsOnClick: false を追加
     const clusterGroup = L.markerClusterGroup({
       spiderfyOnMaxZoom: false,
       zoomToBoundsOnClick: false,
@@ -74,6 +74,9 @@ function MapPage({ user, activeFilter }) {
 
     mapInstanceRef.current = map
     loadPins(map)
+
+    // ★ 追加：マップ初期化後に親へインスタンスを渡す
+    if (onMapReady) onMapReady(map)
   }, [])
 
   useEffect(() => {
@@ -168,7 +171,7 @@ function MapPage({ user, activeFilter }) {
 
   return (
     <>
-      <div ref={mapRef} style={{ width: '100vw', height: '100vh' }} />
+      <div ref={mapRef} style={{ width: '100%', height: '100vh' }} />
 
       {/* ── ライダーカード ── */}
       {riderCard && (
