@@ -1,14 +1,18 @@
 // src/pages/MyPage.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 function MyPage({ user, onClose }) {
   const [username, setUsername] = useState('')
   const [bikeModel, setBikeModel] = useState('')
   const [bio, setBio] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState(null)   // ★ 追加：アイコン画像URL
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)  // ★ 追加：アップロード中フラグ
+  const [iconHover, setIconHover] = useState(false)  // ★ 追加：ホバー状態
+  const fileInputRef = useRef(null)                  // ★ 追加：非表示のファイル入力
 
   useEffect(() => {
     async function loadProfile() {
@@ -18,6 +22,7 @@ function MyPage({ user, onClose }) {
         setUsername(data.username || '')
         setBikeModel(data.bike_model || '')
         setBio(data.bio || '')
+        setAvatarUrl(data.avatar_url || null) // ★ 追加：avatar_urlをセット
       }
       setLoading(false)
     }
@@ -37,12 +42,57 @@ function MyPage({ user, onClose }) {
     setTimeout(() => setSaved(false), 2000)
   }
 
+  // ★ 追加：アイコン画像アップロード処理
+  async function handleAvatarChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+
+    // ファイル名：{user.id}_{タイムスタンプ}.{拡張子}
+    const ext = file.name.split('.').pop()
+    const fileName = `${user.id}_${Date.now()}.${ext}`
+
+    // Supabase Storage の avatars バケットにアップロード
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, file, { upsert: true })
+
+    if (uploadError) {
+      alert('アップロードに失敗しました。')
+      setUploading(false)
+      return
+    }
+
+    // 公開URLを取得
+    const { data: urlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(fileName)
+
+    const publicUrl = urlData.publicUrl
+
+    // profiles テーブルの avatar_url を更新
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ avatar_url: publicUrl })
+      .eq('id', user.id)
+
+    if (updateError) {
+      alert('プロフィールの更新に失敗しました。')
+      setUploading(false)
+      return
+    }
+
+    setAvatarUrl(publicUrl)
+    setUploading(false)
+  }
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0,
       width: '100vw', height: '100vh',
       background: 'rgba(0,0,0,0.7)',
-      zIndex: 3000, // ← 投稿パネル(1000)より高く設定
+      zIndex: 3000,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'sans-serif',
     }}>
@@ -62,8 +112,63 @@ function MyPage({ user, onClose }) {
         <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '6px' }}>
           🏍️ マイページ
         </div>
-        <div style={{ fontSize: '12px', color: '#888', marginBottom: '24px' }}>
+        <div style={{ fontSize: '12px', color: '#888', marginBottom: '20px' }}>
           {user.email}
+        </div>
+
+        {/* ★ 追加：アイコン画像エリア */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+          {/* 非表示のファイル入力（jpg・png・webpのみ） */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleAvatarChange}
+            style={{ display: 'none' }}
+          />
+
+          {/* アイコン丸エリア */}
+          <div
+            onClick={() => !uploading && fileInputRef.current?.click()}
+            onMouseEnter={() => setIconHover(true)}
+            onMouseLeave={() => setIconHover(false)}
+            style={{
+              width: '80px', height: '80px',
+              borderRadius: '50%',
+              background: '#333',
+              border: '2px solid rgba(255,255,255,0.15)',
+              cursor: uploading ? 'wait' : 'pointer',
+              overflow: 'hidden',
+              position: 'relative',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            {/* 画像 or 絵文字 */}
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt="アイコン"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              <span style={{ fontSize: '32px' }}>🏍️</span>
+            )}
+
+            {/* ホバー時オーバーレイ */}
+            {(iconHover || uploading) && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                background: 'rgba(0,0,0,0.6)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '50%',
+                fontSize: '10px', color: 'white', textAlign: 'center',
+                lineHeight: '1.4', padding: '4px',
+              }}>
+                {uploading ? 'アップロード中...' : '📷 タップして変更'}
+              </div>
+            )}
+          </div>
         </div>
 
         {loading ? (
