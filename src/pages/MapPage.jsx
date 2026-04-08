@@ -32,17 +32,20 @@ function MapPage({ user, activeFilter, onMapReady }) {
   const markersRef = useRef([])
   const clusterGroupRef = useRef(null)
   const userRef = useRef(user)
-  const fileInputRefs = [useRef(null), useRef(null)] // ★ 追加：1枚目・2枚目のファイル入力ref
+  const fileInputRefs = [useRef(null), useRef(null)]
 
   const [posting, setPosting] = useState(false)
   const [clickedLatLng, setClickedLatLng] = useState(null)
   const [comment, setComment] = useState('')
   const [pinType, setPinType] = useState('now')
   const [category, setCategory] = useState('other')
-  const [selectedImages, setSelectedImages] = useState([null, null]) // ★ 追加：選択画像（File オブジェクト）
+  const [selectedImages, setSelectedImages] = useState([null, null])
 
   const [riderCard, setRiderCard] = useState(null)
   const [riderProfile, setRiderProfile] = useState(null)
+
+  // ★ 追加：写真モーダル用 state
+  const [photoModal, setPhotoModal] = useState(null)  // { urls: string[], index: number } | null
 
   useEffect(() => {
     userRef.current = user
@@ -71,7 +74,7 @@ function MapPage({ user, activeFilter, onMapReady }) {
       setComment('')
       setPinType('now')
       setCategory('other')
-      setSelectedImages([null, null]) // ★ 追加：パネルを開くたびにリセット
+      setSelectedImages([null, null])
     })
 
     mapInstanceRef.current = map
@@ -121,7 +124,6 @@ function MapPage({ user, activeFilter, onMapReady }) {
     setRiderProfile(profile)
   }
 
-  // ★ 追加：画像選択ハンドラ
   function handleImageSelect(index, e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -130,16 +132,13 @@ function MapPage({ user, activeFilter, onMapReady }) {
     setSelectedImages(updated)
   }
 
-  // ★ 追加：画像選択解除
   function handleImageRemove(index) {
     const updated = [...selectedImages]
     updated[index] = null
     setSelectedImages(updated)
-    // ファイル入力をリセット（同じファイルを再選択できるよう）
     if (fileInputRefs[index].current) fileInputRefs[index].current.value = ''
   }
 
-  // ★ 追加：画像をStorageにアップロードしてURL配列を返す
   async function uploadImages(userId) {
     const urls = []
     for (let i = 0; i < selectedImages.length; i++) {
@@ -163,7 +162,6 @@ function MapPage({ user, activeFilter, onMapReady }) {
     if (!clickedLatLng || !userRef.current) return
     setPosting(true)
 
-    // ★ 追加：画像があれば先にアップロード
     const imageUrls = await uploadImages(userRef.current.id)
 
     let expiresAt = null
@@ -176,7 +174,7 @@ function MapPage({ user, activeFilter, onMapReady }) {
       user_id: userRef.current.id,
       lat: clickedLatLng.lat, lng: clickedLatLng.lng,
       type: pinType, comment, category, expires_at: expiresAt,
-      image_urls: imageUrls, // ★ 追加：画像URL配列（なければnull）
+      image_urls: imageUrls,
     }).select().single()
     if (error) { console.error('投稿エラー:', error); setPosting(false); return }
     addPinToMap(mapInstanceRef.current, data)
@@ -273,15 +271,18 @@ function MapPage({ user, activeFilter, onMapReady }) {
             </div>
           )}
 
-          {/* ★ 追加：ピン写真表示 */}
+          {/* ★ 変更：<a>タグ → クリックでモーダルを開く */}
           {riderCard.image_urls && riderCard.image_urls.length > 0 && (
             <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
               {riderCard.image_urls.map((url, i) => (
-                <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                  style={{ flex: 1, display: 'block', height: '120px', borderRadius: '8px', overflow: 'hidden' }}>
+                <div
+                  key={i}
+                  onClick={() => setPhotoModal({ urls: riderCard.image_urls, index: i })}
+                  style={{ flex: 1, height: '120px', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }}
+                >
                   <img src={url} alt={`写真${i + 1}`}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                </a>
+                </div>
               ))}
             </div>
           )}
@@ -303,6 +304,83 @@ function MapPage({ user, activeFilter, onMapReady }) {
               fontFamily: 'sans-serif',
             }}>🗑️ このピンを削除</button>
           )}
+        </div>
+      )}
+
+      {/* ★ 追加：写真モーダル */}
+      {photoModal && (
+        // 背景（クリックで閉じる）
+        <div
+          onClick={() => setPhotoModal(null)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.88)',
+            zIndex: 2000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'sans-serif',
+          }}
+        >
+          {/* 中央コンテンツ（クリックが背景に伝わらないよう stopPropagation） */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'relative', maxWidth: '90vw', maxHeight: '80vh' }}
+          >
+            {/* 写真 */}
+            <img
+              src={photoModal.urls[photoModal.index]}
+              alt={`写真${photoModal.index + 1}`}
+              style={{
+                maxWidth: '90vw', maxHeight: '80vh',
+                borderRadius: '12px', display: 'block',
+                objectFit: 'contain',
+              }}
+            />
+
+            {/* ✕ 閉じるボタン */}
+            <button
+              onClick={() => setPhotoModal(null)}
+              style={{
+                position: 'absolute', top: '-14px', right: '-14px',
+                width: '32px', height: '32px',
+                borderRadius: '50%', border: 'none',
+                background: 'rgba(255,255,255,0.15)',
+                color: 'white', fontSize: '16px',
+                cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >✕</button>
+
+            {/* 枚数カウンター（複数枚のときのみ表示） */}
+            {photoModal.urls.length > 1 && (
+              <div style={{
+                position: 'absolute', bottom: '-32px', left: '50%',
+                transform: 'translateX(-50%)',
+                color: 'rgba(255,255,255,0.7)', fontSize: '13px',
+                display: 'flex', alignItems: 'center', gap: '16px',
+              }}>
+                {/* 左矢印 */}
+                <button
+                  onClick={() => setPhotoModal(m => ({ ...m, index: (m.index - 1 + m.urls.length) % m.urls.length }))}
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: 'white', fontSize: '20px', cursor: 'pointer', padding: '0',
+                  }}
+                >‹</button>
+
+                {/* 枚数表示 */}
+                <span>{photoModal.index + 1} / {photoModal.urls.length}</span>
+
+                {/* 右矢印 */}
+                <button
+                  onClick={() => setPhotoModal(m => ({ ...m, index: (m.index + 1) % m.urls.length }))}
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: 'white', fontSize: '20px', cursor: 'pointer', padding: '0',
+                  }}
+                >›</button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -369,7 +447,7 @@ function MapPage({ user, activeFilter, onMapReady }) {
             }}
           />
 
-          {/* ★ 追加：写真選択エリア */}
+          {/* 写真選択エリア */}
           <div style={{ marginBottom: '16px' }}>
             <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>📷 写真を追加（最大2枚）</div>
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -378,7 +456,6 @@ function MapPage({ user, activeFilter, onMapReady }) {
                 const previewUrl = file ? URL.createObjectURL(file) : null
                 return (
                   <div key={index} style={{ position: 'relative' }}>
-                    {/* 非表示のファイル入力 */}
                     <input
                       ref={fileInputRefs[index]}
                       type="file"
@@ -386,7 +463,6 @@ function MapPage({ user, activeFilter, onMapReady }) {
                       onChange={(e) => handleImageSelect(index, e)}
                       style={{ display: 'none' }}
                     />
-                    {/* サムネイル or ＋ボタン */}
                     <div
                       onClick={() => !file && fileInputRefs[index].current?.click()}
                       style={{
@@ -406,7 +482,6 @@ function MapPage({ user, activeFilter, onMapReady }) {
                         : <span style={{ fontSize: '24px', color: 'rgba(255,255,255,0.2)' }}>＋</span>
                       }
                     </div>
-                    {/* 選択済みのとき右上に✕ボタン */}
                     {file && (
                       <button
                         onClick={() => handleImageRemove(index)}
