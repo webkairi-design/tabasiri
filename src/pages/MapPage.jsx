@@ -307,7 +307,7 @@ function MapPage({ user, activeFilter, onMapReady }) {
         </div>
       )}
 
-      {/* ★ 追加：写真モーダル */}
+      {/* ★ 写真モーダル */}
       {photoModal && (
         // 背景（クリックで閉じる）
         <div
@@ -350,40 +350,58 @@ function MapPage({ user, activeFilter, onMapReady }) {
               }}
             >✕</button>
 
-            {/* 枚数カウンター（複数枚のときのみ表示） */}
+            {/* 左矢印ボタン（1枚目は非表示） */}
+            {photoModal.urls.length > 1 && photoModal.index > 0 && (
+              <button
+                onClick={() => setPhotoModal(m => ({ ...m, index: m.index - 1 }))}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
+                style={{
+                  position: 'absolute', left: '8px', top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '48px', height: '48px',
+                  borderRadius: '50%', border: 'none',
+                  background: 'rgba(0,0,0,0.5)',
+                  color: 'white', fontSize: '24px',
+                  cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >‹</button>
+            )}
+
+            {/* 右矢印ボタン（最後の枚は非表示） */}
+            {photoModal.urls.length > 1 && photoModal.index < photoModal.urls.length - 1 && (
+              <button
+                onClick={() => setPhotoModal(m => ({ ...m, index: m.index + 1 }))}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
+                style={{
+                  position: 'absolute', right: '8px', top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '48px', height: '48px',
+                  borderRadius: '50%', border: 'none',
+                  background: 'rgba(0,0,0,0.5)',
+                  color: 'white', fontSize: '24px',
+                  cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >›</button>
+            )}
+
+            {/* 枚数カウンター（画像下部中央・14px） */}
             {photoModal.urls.length > 1 && (
               <div style={{
                 position: 'absolute', bottom: '-32px', left: '50%',
                 transform: 'translateX(-50%)',
-                color: 'rgba(255,255,255,0.7)', fontSize: '13px',
-                display: 'flex', alignItems: 'center', gap: '16px',
+                color: 'rgba(255,255,255,0.7)', fontSize: '14px',
+                whiteSpace: 'nowrap',
               }}>
-                {/* 左矢印 */}
-                <button
-                  onClick={() => setPhotoModal(m => ({ ...m, index: (m.index - 1 + m.urls.length) % m.urls.length }))}
-                  style={{
-                    background: 'transparent', border: 'none',
-                    color: 'white', fontSize: '20px', cursor: 'pointer', padding: '0',
-                  }}
-                >‹</button>
-
-                {/* 枚数表示 */}
-                <span>{photoModal.index + 1} / {photoModal.urls.length}</span>
-
-                {/* 右矢印 */}
-                <button
-                  onClick={() => setPhotoModal(m => ({ ...m, index: (m.index + 1) % m.urls.length }))}
-                  style={{
-                    background: 'transparent', border: 'none',
-                    color: 'white', fontSize: '20px', cursor: 'pointer', padding: '0',
-                  }}
-                >›</button>
+                {photoModal.index + 1} / {photoModal.urls.length}
               </div>
             )}
           </div>
         </div>
       )}
-
       {/* ── 投稿パネル ── */}
       {clickedLatLng && (
         <div style={{
