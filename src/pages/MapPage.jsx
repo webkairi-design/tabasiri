@@ -487,10 +487,15 @@ function MapPage({ user, activeFilter, onMapReady }) {
                 </div>
               </div>
 
-              {/* 次へボタン */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              {/* キャンセル＋次へボタン */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setClickedLatLng(null)} style={{
+                  flex: 1, padding: '10px', borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.2)', background: 'transparent',
+                  color: 'white', cursor: 'pointer', fontSize: '14px',
+                }}>キャンセル</button>
                 <button onClick={() => setStep(2)} style={{
-                  padding: '10px 24px', borderRadius: '8px', border: 'none',
+                  flex: 2, padding: '10px', borderRadius: '8px', border: 'none',
                   background: currentColor, color: 'white',
                   cursor: 'pointer', fontSize: '14px', fontWeight: 'bold',
                 }}>次へ →</button>
