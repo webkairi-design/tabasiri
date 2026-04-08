@@ -47,6 +47,9 @@ function MapPage({ user, activeFilter, onMapReady }) {
   // ★ 追加：写真モーダル用 state
   const [photoModal, setPhotoModal] = useState(null)  // { urls: string[], index: number } | null
 
+  // ★ 追加：24時間後に訪問済みへ変換するかどうか
+  const [convertToVisited, setConvertToVisited] = useState(false)
+
   useEffect(() => {
     userRef.current = user
   }, [user])
@@ -75,6 +78,7 @@ function MapPage({ user, activeFilter, onMapReady }) {
       setPinType('now')
       setCategory('other')
       setSelectedImages([null, null])
+      setConvertToVisited(false) // ★ 追加：リセット
     })
 
     mapInstanceRef.current = map
@@ -175,10 +179,11 @@ function MapPage({ user, activeFilter, onMapReady }) {
       lat: clickedLatLng.lat, lng: clickedLatLng.lng,
       type: pinType, comment, category, expires_at: expiresAt,
       image_urls: imageUrls,
+      convert_to_visited: convertToVisited, // ★ 追加
     }).select().single()
     if (error) { console.error('投稿エラー:', error); setPosting(false); return }
     addPinToMap(mapInstanceRef.current, data)
-    setClickedLatLng(null); setComment(''); setSelectedImages([null, null]); setPosting(false)
+    setClickedLatLng(null); setComment(''); setSelectedImages([null, null]); setConvertToVisited(false); setPosting(false)
   }
 
   async function deletePin() {
@@ -420,7 +425,10 @@ function MapPage({ user, activeFilter, onMapReady }) {
               {PIN_TYPES.map((type) => {
                 const isSelected = pinType === type.key
                 return (
-                  <button key={type.key} onClick={() => setPinType(type.key)} style={{
+                  <button key={type.key} onClick={() => {
+                    setPinType(type.key)
+                    if (type.key !== 'now') setConvertToVisited(false) // ★ 追加：now以外はリセット
+                  }} style={{
                     flex: 1, padding: '8px 4px', borderRadius: '8px',
                     border: isSelected ? `2px solid ${PIN_COLORS[type.key]}` : '2px solid rgba(255,255,255,0.15)',
                     background: isSelected ? `${PIN_COLORS[type.key]}22` : 'transparent',
@@ -433,6 +441,33 @@ function MapPage({ user, activeFilter, onMapReady }) {
               {PIN_TYPES.find(t => t.key === pinType)?.desc}
             </div>
           </div>
+
+          {/* ★ 追加：「今ここ」選択時のみ表示する24時間後の選択肢 */}
+          {pinType === 'now' && (
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>24時間後どうする？</div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={() => setConvertToVisited(false)}
+                  style={{
+                    flex: 1, padding: '8px 4px', borderRadius: '8px',
+                    border: !convertToVisited ? '2px solid rgba(255,255,255,0.6)' : '2px solid rgba(255,255,255,0.15)',
+                    background: !convertToVisited ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: 'white', cursor: 'pointer', fontSize: '11px', textAlign: 'center', lineHeight: '1.4',
+                  }}
+                >そのまま消える</button>
+                <button
+                  onClick={() => setConvertToVisited(true)}
+                  style={{
+                    flex: 1, padding: '8px 4px', borderRadius: '8px',
+                    border: convertToVisited ? '2px solid #00C853' : '2px solid rgba(255,255,255,0.15)',
+                    background: convertToVisited ? '#00C85322' : 'transparent',
+                    color: 'white', cursor: 'pointer', fontSize: '11px', textAlign: 'center', lineHeight: '1.4',
+                  }}
+                >訪問済みに変換する</button>
+              </div>
+            </div>
+          )}
 
           <div style={{ marginBottom: '14px' }}>
             <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>カテゴリ</div>
