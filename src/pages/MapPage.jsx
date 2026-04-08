@@ -32,12 +32,14 @@ function MapPage({ user, activeFilter, onMapReady }) {
   const markersRef = useRef([])
   const clusterGroupRef = useRef(null)
   const userRef = useRef(user)
+  const fileInputRefs = [useRef(null), useRef(null)] // ★ 追加：1枚目・2枚目のファイル入力ref
 
   const [posting, setPosting] = useState(false)
   const [clickedLatLng, setClickedLatLng] = useState(null)
   const [comment, setComment] = useState('')
   const [pinType, setPinType] = useState('now')
   const [category, setCategory] = useState('other')
+  const [selectedImages, setSelectedImages] = useState([null, null]) // ★ 追加：選択画像（File オブジェクト）
 
   const [riderCard, setRiderCard] = useState(null)
   const [riderProfile, setRiderProfile] = useState(null)
@@ -69,6 +71,7 @@ function MapPage({ user, activeFilter, onMapReady }) {
       setComment('')
       setPinType('now')
       setCategory('other')
+      setSelectedImages([null, null]) // ★ 追加：パネルを開くたびにリセット
     })
 
     mapInstanceRef.current = map
@@ -118,9 +121,51 @@ function MapPage({ user, activeFilter, onMapReady }) {
     setRiderProfile(profile)
   }
 
+  // ★ 追加：画像選択ハンドラ
+  function handleImageSelect(index, e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const updated = [...selectedImages]
+    updated[index] = file
+    setSelectedImages(updated)
+  }
+
+  // ★ 追加：画像選択解除
+  function handleImageRemove(index) {
+    const updated = [...selectedImages]
+    updated[index] = null
+    setSelectedImages(updated)
+    // ファイル入力をリセット（同じファイルを再選択できるよう）
+    if (fileInputRefs[index].current) fileInputRefs[index].current.value = ''
+  }
+
+  // ★ 追加：画像をStorageにアップロードしてURL配列を返す
+  async function uploadImages(userId) {
+    const urls = []
+    for (let i = 0; i < selectedImages.length; i++) {
+      const file = selectedImages[i]
+      if (!file) continue
+      const ext = file.name.split('.').pop()
+      const fileName = `${userId}_${Date.now()}_${i}.${ext}`
+      const { error } = await supabase.storage
+        .from('pin-images')
+        .upload(fileName, file, { upsert: true })
+      if (error) { console.error('画像アップロードエラー:', error); continue }
+      const { data: urlData } = supabase.storage
+        .from('pin-images')
+        .getPublicUrl(fileName)
+      urls.push(urlData.publicUrl)
+    }
+    return urls.length > 0 ? urls : null
+  }
+
   async function postPin() {
     if (!clickedLatLng || !userRef.current) return
     setPosting(true)
+
+    // ★ 追加：画像があれば先にアップロード
+    const imageUrls = await uploadImages(userRef.current.id)
+
     let expiresAt = null
     if (pinType === 'now') {
       const expires = new Date()
@@ -131,10 +176,11 @@ function MapPage({ user, activeFilter, onMapReady }) {
       user_id: userRef.current.id,
       lat: clickedLatLng.lat, lng: clickedLatLng.lng,
       type: pinType, comment, category, expires_at: expiresAt,
+      image_urls: imageUrls, // ★ 追加：画像URL配列（なければnull）
     }).select().single()
     if (error) { console.error('投稿エラー:', error); setPosting(false); return }
     addPinToMap(mapInstanceRef.current, data)
-    setClickedLatLng(null); setComment(''); setPosting(false)
+    setClickedLatLng(null); setComment(''); setSelectedImages([null, null]); setPosting(false)
   }
 
   async function deletePin() {
@@ -194,8 +240,6 @@ function MapPage({ user, activeFilter, onMapReady }) {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-
-            {/* ── アイコン（★ avatar_url があれば画像、なければ🏍️絵文字）── */}
             <div style={{
               width: '44px', height: '44px', borderRadius: '50%',
               background: riderProfile === null ? 'rgba(255,255,255,0.1)' : cardColor,
@@ -211,7 +255,6 @@ function MapPage({ user, activeFilter, onMapReady }) {
                   : '🏍️'
               }
             </div>
-
             <div>
               <div style={{ fontWeight: 'bold', fontSize: '15px' }}>
                 {riderProfile === null ? '読み込み中...' : (riderProfile.username || 'ライダー')}
@@ -229,6 +272,20 @@ function MapPage({ user, activeFilter, onMapReady }) {
               💬 {riderCard.comment}
             </div>
           )}
+
+          {/* ★ 追加：ピン写真表示 */}
+          {riderCard.image_urls && riderCard.image_urls.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+              {riderCard.image_urls.map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                  style={{ flex: 1, display: 'block', height: '120px', borderRadius: '8px', overflow: 'hidden' }}>
+                  <img src={url} alt={`写真${i + 1}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </a>
+              ))}
+            </div>
+          )}
+
           <div style={{ fontSize: '11px', color: '#555', marginTop: '10px', textAlign: 'right' }}>
             {riderCard.lat.toFixed(4)}, {riderCard.lng.toFixed(4)}
           </div>
@@ -312,8 +369,67 @@ function MapPage({ user, activeFilter, onMapReady }) {
             }}
           />
 
+          {/* ★ 追加：写真選択エリア */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>📷 写真を追加（最大2枚）</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[0, 1].map((index) => {
+                const file = selectedImages[index]
+                const previewUrl = file ? URL.createObjectURL(file) : null
+                return (
+                  <div key={index} style={{ position: 'relative' }}>
+                    {/* 非表示のファイル入力 */}
+                    <input
+                      ref={fileInputRefs[index]}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(e) => handleImageSelect(index, e)}
+                      style={{ display: 'none' }}
+                    />
+                    {/* サムネイル or ＋ボタン */}
+                    <div
+                      onClick={() => !file && fileInputRefs[index].current?.click()}
+                      style={{
+                        width: '80px', height: '80px',
+                        borderRadius: '8px',
+                        border: file ? 'none' : '2px dashed rgba(255,255,255,0.2)',
+                        background: file ? 'transparent' : 'rgba(255,255,255,0.03)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: file ? 'default' : 'pointer',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {previewUrl
+                        ? <img src={previewUrl} alt={`プレビュー${index + 1}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <span style={{ fontSize: '24px', color: 'rgba(255,255,255,0.2)' }}>＋</span>
+                      }
+                    </div>
+                    {/* 選択済みのとき右上に✕ボタン */}
+                    {file && (
+                      <button
+                        onClick={() => handleImageRemove(index)}
+                        style={{
+                          position: 'absolute', top: '-6px', right: '-6px',
+                          width: '20px', height: '20px',
+                          borderRadius: '50%', border: 'none',
+                          background: 'rgba(0,0,0,0.8)',
+                          color: 'white', fontSize: '11px',
+                          cursor: 'pointer', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          lineHeight: 1,
+                        }}
+                      >✕</button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => setClickedLatLng(null)} style={{
+            <button onClick={() => { setClickedLatLng(null); setSelectedImages([null, null]) }} style={{
               flex: 1, padding: '10px', borderRadius: '8px',
               border: '1px solid rgba(255,255,255,0.2)', background: 'transparent',
               color: 'white', cursor: 'pointer', fontSize: '14px',
