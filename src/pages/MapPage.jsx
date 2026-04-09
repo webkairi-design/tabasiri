@@ -255,7 +255,7 @@ function MapPage({ user, activeFilter, onMapReady }) {
     )
   }
 
-  // ★ 追加：住所検索（Nominatim）
+  // ★ 追加：住所検索（Photon API）
   async function handleSearch(e) {
     e.preventDefault()
     if (!searchQuery.trim()) return
@@ -265,17 +265,16 @@ function MapPage({ user, activeFilter, onMapReady }) {
     try {
       const encoded = encodeURIComponent(searchQuery.trim())
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1&accept-language=ja`,
-        { headers: { 'Accept-Language': 'ja' } }
+        `https://photon.komoot.io/api/?q=${encoded}&limit=1&lang=ja`
       )
       const results = await res.json()
-      if (!results || results.length === 0) {
+      if (!results || !results.features || results.features.length === 0) {
         setSearchError('見つかりませんでした。別の地名をお試しください')
         setSearchLoading(false)
         return
       }
-      const { lat, lon } = results[0]
-      const latlng = { lat: parseFloat(lat), lng: parseFloat(lon) }
+      const [lng, lat] = results.features[0].geometry.coordinates
+      const latlng = { lat, lng }
       mapInstanceRef.current?.flyTo([latlng.lat, latlng.lng], 15)
       setRiderCard(null)
       setRiderProfile(null)
