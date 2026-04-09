@@ -53,6 +53,13 @@ function MapPage({ user, activeFilter, onMapReady }) {
   // ★ 追加：投稿パネルのステップ（1 or 2）
   const [step, setStep] = useState(1)
 
+  // ★ 追加：GPS・住所検索用 state
+  const [gpsLoading, setGpsLoading] = useState(false)
+  const [gpsError, setGpsError] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
+
   useEffect(() => {
     userRef.current = user
   }, [user])
@@ -214,6 +221,78 @@ function MapPage({ user, activeFilter, onMapReady }) {
     setRiderProfile(null)
   }
 
+  // ★ 追加：GPS現在地取得
+  function handleGps() {
+    if (!userRef.current) return
+    if (!navigator.geolocation) {
+      setGpsError('このブラウザはGPSに対応していません')
+      return
+    }
+    setGpsLoading(true)
+    setGpsError('')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const latlng = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        mapInstanceRef.current?.flyTo([latlng.lat, latlng.lng], 15)
+        setRiderCard(null)
+        setRiderProfile(null)
+        setClickedLatLng(latlng)
+        setComment('')
+        setPinType('now')
+        setCategory('other')
+        setSelectedImages([null, null])
+        setConvertToVisited(false)
+        setStep(1)
+        setGpsLoading(false)
+      },
+      (err) => {
+        setGpsLoading(false)
+        if (err.code === 1) setGpsError('位置情報の許可が必要です')
+        else if (err.code === 2) setGpsError('現在地を取得できませんでした')
+        else setGpsError('タイムアウトしました。再度お試しください')
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  // ★ 追加：住所検索（Nominatim）
+  async function handleSearch(e) {
+    e.preventDefault()
+    if (!searchQuery.trim()) return
+    if (!userRef.current) return
+    setSearchLoading(true)
+    setSearchError('')
+    try {
+      const encoded = encodeURIComponent(searchQuery.trim())
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encoded}&format=json&limit=1&accept-language=ja`,
+        { headers: { 'Accept-Language': 'ja' } }
+      )
+      const results = await res.json()
+      if (!results || results.length === 0) {
+        setSearchError('見つかりませんでした。別の地名をお試しください')
+        setSearchLoading(false)
+        return
+      }
+      const { lat, lon } = results[0]
+      const latlng = { lat: parseFloat(lat), lng: parseFloat(lon) }
+      mapInstanceRef.current?.flyTo([latlng.lat, latlng.lng], 15)
+      setRiderCard(null)
+      setRiderProfile(null)
+      setClickedLatLng(latlng)
+      setComment('')
+      setPinType('now')
+      setCategory('other')
+      setSelectedImages([null, null])
+      setConvertToVisited(false)
+      setStep(1)
+      setSearchQuery('')
+    } catch {
+      setSearchError('通信エラーが発生しました')
+    }
+    setSearchLoading(false)
+  }
+
   const currentColor = PIN_COLORS[pinType]
   const cardType = riderCard ? PIN_TYPES.find(t => t.key === riderCard.type) : null
   const cardColor = riderCard ? (PIN_COLORS[riderCard.type] || '#888') : '#888'
@@ -223,6 +302,108 @@ function MapPage({ user, activeFilter, onMapReady }) {
   return (
     <>
       <div ref={mapRef} style={{ width: '100%', height: '100vh' }} />
+
+      {/* ★ 追加：GPS・住所検索UI（右上ズームボタンの下） */}
+      <div style={{
+        position: 'fixed',
+        top: '126px', // Leafletのズームボタン（高さ約110px）の下
+        right: '10px',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        fontFamily: 'sans-serif',
+      }}>
+        {/* GPSボタン */}
+        <button
+          onClick={handleGps}
+          disabled={gpsLoading || !user}
+          title={user ? '現在地に移動して投稿パネルを開く' : 'ログインが必要です'}
+          style={{
+            width: '34px',
+            height: '34px',
+            borderRadius: '4px',
+            border: '2px solid rgba(0,0,0,0.2)',
+            background: 'white',
+            color: gpsLoading ? '#aaa' : '#333',
+            fontSize: '16px',
+            cursor: user ? 'pointer' : 'not-allowed',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 1px 5px rgba(0,0,0,0.4)',
+          }}
+        >
+          {gpsLoading ? '…' : '📍'}
+        </button>
+
+        {/* 住所検索フォーム */}
+        <form
+          onSubmit={handleSearch}
+          style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
+        >
+          <div style={{ display: 'flex', gap: '0' }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setSearchError('') }}
+              placeholder="地名・住所を検索"
+              disabled={!user}
+              style={{
+                width: '160px',
+                height: '34px',
+                padding: '0 8px',
+                borderRadius: '4px 0 0 4px',
+                border: '2px solid rgba(0,0,0,0.2)',
+                borderRight: 'none',
+                background: 'white',
+                color: '#111',
+                fontSize: '12px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                boxShadow: '0 1px 5px rgba(0,0,0,0.4)',
+              }}
+            />
+            <button
+              type="submit"
+              disabled={searchLoading || !user}
+              style={{
+                width: '34px',
+                height: '34px',
+                borderRadius: '0 4px 4px 0',
+                border: '2px solid rgba(0,0,0,0.2)',
+                background: 'white',
+                color: searchLoading ? '#aaa' : '#333',
+                fontSize: '14px',
+                cursor: user ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 1px 5px rgba(0,0,0,0.4)',
+                flexShrink: 0,
+              }}
+            >
+              {searchLoading ? '…' : '🔍'}
+            </button>
+          </div>
+
+          {/* エラーメッセージ（GPS / 住所検索） */}
+          {(gpsError || searchError) && (
+            <div style={{
+              background: 'rgba(20,20,20,0.9)',
+              color: '#ff6b6b',
+              fontSize: '11px',
+              padding: '6px 8px',
+              borderRadius: '6px',
+              maxWidth: '194px',
+              lineHeight: '1.4',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            }}>
+              {gpsError || searchError}
+            </div>
+          )}
+        </form>
+      </div>
 
       {/* ── ライダーカード ── */}
       {riderCard && (
