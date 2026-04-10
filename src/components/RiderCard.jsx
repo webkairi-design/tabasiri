@@ -6,9 +6,71 @@
 //   onClose     : () => void  ✕ボタン押下
 //   onDelete    : () => void  削除ボタン押下
 //   onPhotoClick: (urls, index) => void  写真タップでモーダルを開く
+import { useState, useEffect } from 'react'
 import { CATEGORIES, PIN_TYPES, PIN_COLORS } from '../constants'
+import { supabase } from '../lib/supabase'
+
+// リアクションで使う絵文字の定義
+const REACTION_EMOJIS = ['🔥', '😋', '😆', '🏍️']
 
 function RiderCard({ riderCard, riderProfile, user, onClose, onDelete, onPhotoClick }) {
+  // reactions: { emoji: string, count: number, myReactionId: string|null }[]
+  const [reactions, setReactions] = useState([])
+  const [reactionLoading, setReactionLoading] = useState(false)
+
+  // ── ライダーカードが開くたびにリアクションを取得 ──
+  useEffect(() => {
+    if (!riderCard) { setReactions([]); return }
+    fetchReactions(riderCard.id)
+  }, [riderCard?.id])
+
+  // pin_reactions テーブルから該当ピンの全リアクションを取得し、
+  // 絵文字ごとに「件数」と「自分のリアクションID」を集計する
+  async function fetchReactions(pinId) {
+    const { data, error } = await supabase
+      .from('pin_reactions')
+      .select('id, emoji, user_id')
+      .eq('pin_id', pinId)
+    if (error) { console.error('リアクション取得エラー:', error); return }
+
+    const summary = REACTION_EMOJIS.map((emoji) => {
+      const rows = data.filter(r => r.emoji === emoji)
+      const mine = user ? rows.find(r => r.user_id === user.id) : null
+      return {
+        emoji,
+        count: rows.length,
+        myReactionId: mine ? mine.id : null,
+      }
+    })
+    setReactions(summary)
+  }
+
+  // ボタン押下：自分のリアクションがあれば DELETE、なければ INSERT → 再取得
+  async function handleReaction(emoji) {
+    if (!user || !riderCard || reactionLoading) return
+    setReactionLoading(true)
+
+    const current = reactions.find(r => r.emoji === emoji)
+
+    if (current?.myReactionId) {
+      // すでに押している → 解除（DELETE）
+      const { error } = await supabase
+        .from('pin_reactions')
+        .delete()
+        .eq('id', current.myReactionId)
+      if (error) console.error('リアクション削除エラー:', error)
+    } else {
+      // まだ押していない → 追加（INSERT）
+      const { error } = await supabase
+        .from('pin_reactions')
+        .insert({ pin_id: riderCard.id, user_id: user.id, emoji })
+      if (error) console.error('リアクション追加エラー:', error)
+    }
+
+    await fetchReactions(riderCard.id)
+    setReactionLoading(false)
+  }
+
   if (!riderCard) return null
 
   const cardType  = PIN_TYPES.find(t => t.key === riderCard.type)
@@ -97,6 +159,60 @@ function RiderCard({ riderCard, riderProfile, user, onClose, onDelete, onPhotoCl
       <div style={{ fontSize: '11px', color: '#555', marginTop: '10px', textAlign: 'right' }}>
         {riderCard.lat.toFixed(4)}, {riderCard.lng.toFixed(4)}
       </div>
+
+      {/* ── リアクションボタン（ログイン時のみ表示） ── */}
+      {user && (
+        <div style={{
+          display: 'flex',
+          gap: '6px',
+          marginTop: '14px',
+          paddingTop: '12px',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+        }}>
+          {reactions.map(({ emoji, count, myReactionId }) => {
+            const isActive = !!myReactionId
+            return (
+              <button
+                key={emoji}
+                onClick={() => handleReaction(emoji)}
+                disabled={reactionLoading}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px',
+                  borderRadius: '10px',
+                  border: isActive
+                    ? '1.5px solid rgba(255,255,255,0.6)'
+                    : '1.5px solid rgba(255,255,255,0.12)',
+                  background: isActive
+                    ? 'rgba(255,255,255,0.15)'
+                    : 'rgba(255,255,255,0.04)',
+                  color: 'white',
+                  cursor: reactionLoading ? 'not-allowed' : 'pointer',
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  transition: 'background 0.15s, border 0.15s',
+                  fontFamily: 'sans-serif',
+                }}
+              >
+                <span style={{ fontSize: '16px', lineHeight: 1 }}>{emoji}</span>
+                {count > 0 && (
+                  <span style={{
+                    fontSize: '11px',
+                    color: isActive ? 'white' : '#aaa',
+                    fontWeight: isActive ? 'bold' : 'normal',
+                    minWidth: '10px',
+                  }}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* 削除ボタン（自分のピンのみ） */}
       {isMyPin && (

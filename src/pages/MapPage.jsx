@@ -102,6 +102,8 @@ function MapPage({ user, activeFilter, onMapReady }) {
     const clusterGroup = L.markerClusterGroup({
       spiderfyOnMaxZoom: false,
       zoomToBoundsOnClick: false,
+      maxClusterRadius: 40,        // 変更：デフォルト80→40に縮小
+      disableClusteringAtZoom: 16, // 追加：ズームレベル16以上で必ずクラスター解除
     })
     clusterGroup.addTo(map)
     clusterGroupRef.current = clusterGroup
