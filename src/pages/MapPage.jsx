@@ -73,6 +73,10 @@ function MapPage({ user, activeFilter, onMapReady }) {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
 
+  // ★ UIリニューアル：フローティングバーの検索欄展開フラグ
+  const [searchExpanded, setSearchExpanded] = useState(false)    // 検索欄の開閉
+  const searchInputRef = useRef(null)                             // 展開後にフォーカスを当てるref
+
   // ★ 追加：周辺ピン一覧パネル用 state
   const [gpsLatLng, setGpsLatLng] = useState(null)               // GPS取得済み座標
   const [nearbyPanelOpen, setNearbyPanelOpen] = useState(false)  // パネルの開閉
@@ -361,130 +365,197 @@ function MapPage({ user, activeFilter, onMapReady }) {
     <>
       <div ref={mapRef} style={{ width: '100%', height: '100vh' }} />
 
-      {/* ★ 追加：GPS・住所検索UI（右上ズームボタンの下） */}
-      <div style={{
-        position: 'fixed',
-        top: '126px', // Leafletのズームボタン（高さ約110px）の下
-        right: '10px',
-        zIndex: 1000,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-        fontFamily: 'sans-serif',
-      }}>
-        {/* GPSボタン */}
-        <button
-          onClick={handleGps}
-          disabled={gpsLoading || !user}
-          title={user ? '現在地に移動して投稿パネルを開く' : 'ログインが必要です'}
-          style={{
-            width: '34px',
-            height: '34px',
-            borderRadius: '4px',
-            border: '2px solid rgba(0,0,0,0.2)',
-            background: 'white',
-            color: gpsLoading ? '#aaa' : '#333',
-            fontSize: '16px',
-            cursor: user ? 'pointer' : 'not-allowed',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 1px 5px rgba(0,0,0,0.4)',
-          }}
-        >
-          {gpsLoading ? '…' : '📍'}
-        </button>
-
-        {/* ★ 追加：「周辺のピンを見る」ボタン（GPS取得後のみ表示） */}
-        {gpsLatLng && (
-          <button
-            onClick={handleOpenNearby}
-            title="現在地周辺のピンを一覧表示"
-            style={{
-              height: '34px',
-              padding: '0 8px',
-              borderRadius: '4px',
-              border: '2px solid rgba(0,0,0,0.2)',
-              background: 'white',
-              color: '#333',
-              fontSize: '11px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              boxShadow: '0 1px 5px rgba(0,0,0,0.4)',
-            }}
-          >
-            📡 周辺を見る
-          </button>
-        )}
-
-        {/* 住所検索フォーム */}
-        <form
-          onSubmit={handleSearch}
-          style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
-        >
-          <div style={{ display: 'flex', gap: '0' }}>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setSearchError('') }}
-              placeholder="地名・住所を検索"
-              disabled={!user}
-              style={{
-                width: '160px',
-                height: '34px',
-                padding: '0 8px',
-                borderRadius: '4px 0 0 4px',
-                border: '2px solid rgba(0,0,0,0.2)',
-                borderRight: 'none',
-                background: 'white',
-                color: '#111',
-                fontSize: '12px',
-                outline: 'none',
-                boxSizing: 'border-box',
-                boxShadow: '0 1px 5px rgba(0,0,0,0.4)',
-              }}
-            />
-            <button
-              type="submit"
-              disabled={searchLoading || !user}
-              style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '0 4px 4px 0',
-                border: '2px solid rgba(0,0,0,0.2)',
-                background: 'white',
-                color: searchLoading ? '#aaa' : '#333',
-                fontSize: '14px',
-                cursor: user ? 'pointer' : 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 1px 5px rgba(0,0,0,0.4)',
-                flexShrink: 0,
-              }}
-            >
-              {searchLoading ? '…' : '🔍'}
-            </button>
-          </div>
-
-          {/* エラーメッセージ（GPS / 住所検索） */}
+      {/* ★ UIリニューアル：下部フローティングバー（投稿パネル・ライダーカードが開いているときは非表示） */}
+      {!clickedLatLng && !riderCard && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '6px',
+          fontFamily: 'sans-serif',
+        }}>
+          {/* エラートースト（GPS / 住所検索） */}
           {(gpsError || searchError) && (
             <div style={{
-              background: 'rgba(20,20,20,0.9)',
+              background: 'rgba(20,20,20,0.92)',
               color: '#ff6b6b',
-              fontSize: '11px',
-              padding: '6px 8px',
-              borderRadius: '6px',
-              maxWidth: '194px',
+              fontSize: '12px',
+              padding: '7px 14px',
+              borderRadius: '20px',
               lineHeight: '1.4',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+              whiteSpace: 'nowrap',
             }}>
               {gpsError || searchError}
             </div>
           )}
-        </form>
-      </div>
+
+          {/* 検索欄（searchExpanded のときだけ表示） */}
+          {searchExpanded && (
+            <form
+              onSubmit={(e) => {
+                handleSearch(e)
+                setSearchExpanded(false)
+              }}
+              style={{ display: 'flex', gap: '0' }}
+            >
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setSearchError('') }}
+                onKeyDown={(e) => { if (e.key === 'Escape') { setSearchExpanded(false); setSearchQuery('') } }}
+                placeholder="地名・施設名を入力して Enter"
+                autoFocus
+                style={{
+                  width: '240px',
+                  height: '40px',
+                  padding: '0 12px',
+                  borderRadius: '20px 0 0 20px',
+                  border: '1.5px solid rgba(255,255,255,0.2)',
+                  borderRight: 'none',
+                  background: 'rgba(20,20,20,0.92)',
+                  backdropFilter: 'blur(10px)',
+                  color: 'white',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={searchLoading}
+                style={{
+                  width: '44px',
+                  height: '40px',
+                  borderRadius: '0 20px 20px 0',
+                  border: '1.5px solid rgba(255,255,255,0.2)',
+                  background: 'rgba(20,20,20,0.92)',
+                  backdropFilter: 'blur(10px)',
+                  color: searchLoading ? '#666' : 'white',
+                  fontSize: '15px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                  flexShrink: 0,
+                }}
+              >
+                {searchLoading ? '…' : '🔍'}
+              </button>
+            </form>
+          )}
+
+          {/* メインバー：3ボタン横並び */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2px',
+            background: 'rgba(20,20,20,0.88)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '40px',
+            padding: '6px 8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.55)',
+          }}>
+
+            {/* ① 現在地ボタン */}
+            <button
+              onClick={handleGps}
+              disabled={gpsLoading || !user}
+              title={user ? '現在地を取得' : 'ログインが必要です'}
+              style={{
+                height: '38px',
+                padding: '0 16px',
+                borderRadius: '30px',
+                border: 'none',
+                background: gpsLoading ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.1)',
+                color: (!user || gpsLoading) ? '#555' : 'white',
+                fontSize: '13px',
+                fontWeight: 'bold',
+                cursor: (!user || gpsLoading) ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (user && !gpsLoading) e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = gpsLoading ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.1)' }}
+            >
+              {gpsLoading ? '取得中…' : '📍 現在地'}
+            </button>
+
+            {/* セパレーター */}
+            <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+
+            {/* ② 場所を検索ボタン（タップで入力欄展開） */}
+            <button
+              onClick={() => {
+                if (!user) return
+                setSearchExpanded(v => !v)
+                setSearchError('')
+                if (!searchExpanded) {
+                  // 展開時：次のレンダー後にフォーカス（autoFocusで対応済みだが念のため）
+                  setTimeout(() => searchInputRef.current?.focus(), 50)
+                } else {
+                  setSearchQuery('')
+                }
+              }}
+              disabled={!user}
+              title={user ? '場所・施設名を検索' : 'ログインが必要です'}
+              style={{
+                height: '38px',
+                padding: '0 16px',
+                borderRadius: '30px',
+                border: 'none',
+                background: searchExpanded ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.1)',
+                color: !user ? '#555' : 'white',
+                fontSize: '13px',
+                fontWeight: searchExpanded ? 'bold' : 'normal',
+                cursor: !user ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (user) e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = searchExpanded ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.1)' }}
+            >
+              🔍 {searchExpanded ? '閉じる' : '場所を検索'}
+            </button>
+
+            {/* セパレーター */}
+            <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+
+            {/* ③ 周辺を見るボタン（GPS未取得時はグレーアウト） */}
+            <button
+              onClick={handleOpenNearby}
+              disabled={!gpsLatLng}
+              title={gpsLatLng ? '現在地周辺のピンを一覧表示' : '先に現在地を取得してください'}
+              style={{
+                height: '38px',
+                padding: '0 16px',
+                borderRadius: '30px',
+                border: 'none',
+                background: 'rgba(255,255,255,0.1)',
+                color: gpsLatLng ? 'white' : '#555',
+                fontSize: '13px',
+                fontWeight: 'normal',
+                cursor: gpsLatLng ? 'pointer' : 'not-allowed',
+                whiteSpace: 'nowrap',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (gpsLatLng) e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
+            >
+              📡 周辺を見る
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ★ 追加：周辺ピン一覧パネル（右からスライドイン） */}
       {nearbyPanelOpen && (
