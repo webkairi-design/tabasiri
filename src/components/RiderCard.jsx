@@ -13,6 +13,17 @@ import { supabase } from '../lib/supabase'
 // リアクションで使う絵文字の定義
 const REACTION_EMOJIS = ['🔥', '😋', '😆', '🏍️']
 
+// 天気コード（WMO）を絵文字＋ラベルに変換する
+function getWeatherLabel(code) {
+  if (code === 0)                                          return '☀️ 快晴'
+  if ([1, 2, 3].includes(code))                           return '🌤️ 晴れ'
+  if ([45, 48].includes(code))                            return '🌫️ 霧'
+  if ([51,53,55,61,63,65,80,81,82].includes(code))        return '🌧️ 雨'
+  if ([71,73,75,77,85,86].includes(code))                 return '🌨️ 雪'
+  if ([95, 96, 99].includes(code))                        return '⛈️ 雷雨'
+  return '🌥️ 曇り'
+}
+
 function RiderCard({ riderCard, riderProfile, user, onClose, onDelete, onPhotoClick }) {
   // reactions: { emoji: string, count: number, myReactionId: string|null }[]
   const [reactions, setReactions] = useState([])
@@ -136,6 +147,13 @@ function RiderCard({ riderCard, riderProfile, user, onClose, onDelete, onPhotoCl
       {riderCard.comment && (
         <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px 14px', fontSize: '14px', color: '#ddd', lineHeight: '1.5' }}>
           💬 {riderCard.comment}
+        </div>
+      )}
+
+      {/* 天気・気温（投稿時に取得済みの場合のみ表示） */}
+      {riderCard.weather_code != null && riderCard.temperature != null && (
+        <div style={{ fontSize: '12px', color: '#aaa', marginTop: '8px' }}>
+          {getWeatherLabel(riderCard.weather_code)} / {riderCard.temperature}℃
         </div>
       )}
 
