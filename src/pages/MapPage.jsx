@@ -6,8 +6,14 @@ import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { supabase } from '../lib/supabase'
-import { CATEGORIES, PIN_TYPES, PIN_COLORS } from '../constants'
+import { CATEGORIES, PIN_COLORS } from '../constants'
+import PostPanel   from '../components/PostPanel'
+import RiderCard   from '../components/RiderCard'
+import NearbyPanel from '../components/NearbyPanel'
+import PhotoModal  from '../components/PhotoModal'
+import BottomBar   from '../components/BottomBar'
 
+// ── Leaflet デフォルトアイコン修正 ──
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -26,10 +32,9 @@ function createColorPin(color, emoji = '') {
   })
 }
 
-// ★ 追加：Haversine公式（2点間の距離をkmで返す）
-// 球面三角法を使って緯度・経度から実際の距離を計算する
+// Haversine公式（2点間の距離をkmで返す）
 function haversineKm(lat1, lng1, lat2, lng2) {
-  const R = 6371 // 地球の半径（km）
+  const R = 6371
   const dLat = (lat2 - lat1) * Math.PI / 180
   const dLng = (lng2 - lng1) * Math.PI / 180
   const a =
@@ -40,53 +45,52 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 }
 
 function MapPage({ user, activeFilter, onMapReady }) {
-  const mapRef = useRef(null)
-  const mapInstanceRef = useRef(null)
-  const markersRef = useRef([])
+  // ── 地図関連 ref ──
+  const mapRef          = useRef(null)
+  const mapInstanceRef  = useRef(null)
+  const markersRef      = useRef([])
   const clusterGroupRef = useRef(null)
-  const userRef = useRef(user)
+  const userRef         = useRef(user)
+
+  // ── 投稿パネル用 ref ──
   const fileInputRefs = [useRef(null), useRef(null)]
 
-  const [posting, setPosting] = useState(false)
-  const [clickedLatLng, setClickedLatLng] = useState(null)
-  const [comment, setComment] = useState('')
-  const [pinType, setPinType] = useState('now')
-  const [category, setCategory] = useState('other')
-  const [selectedImages, setSelectedImages] = useState([null, null])
+  // ── 投稿パネル state ──
+  const [posting, setPosting]                   = useState(false)
+  const [clickedLatLng, setClickedLatLng]       = useState(null)
+  const [comment, setComment]                   = useState('')
+  const [pinType, setPinType]                   = useState('now')
+  const [category, setCategory]                 = useState('other')
+  const [selectedImages, setSelectedImages]     = useState([null, null])
+  const [convertToVisited, setConvertToVisited] = useState(false)
+  const [step, setStep]                         = useState(1)
 
-  const [riderCard, setRiderCard] = useState(null)
+  // ── ライダーカード state ──
+  const [riderCard, setRiderCard]       = useState(null)
   const [riderProfile, setRiderProfile] = useState(null)
 
-  // ★ 追加：写真モーダル用 state
-  const [photoModal, setPhotoModal] = useState(null)  // { urls: string[], index: number } | null
+  // ── 写真モーダル state ──
+  const [photoModal, setPhotoModal] = useState(null)
 
-  // ★ 追加：24時間後に訪問済みへ変換するかどうか
-  const [convertToVisited, setConvertToVisited] = useState(false)
+  // ── GPS・住所検索 state ──
+  const [gpsLoading, setGpsLoading]         = useState(false)
+  const [gpsError, setGpsError]             = useState('')
+  const [searchQuery, setSearchQuery]       = useState('')
+  const [searchLoading, setSearchLoading]   = useState(false)
+  const [searchError, setSearchError]       = useState('')
+  const [searchExpanded, setSearchExpanded] = useState(false)
+  const searchInputRef                      = useRef(null)
 
-  // ★ 追加：投稿パネルのステップ（1 or 2）
-  const [step, setStep] = useState(1)
+  // ── 周辺ピン一覧パネル state ──
+  const [gpsLatLng, setGpsLatLng]             = useState(null)
+  const [nearbyPanelOpen, setNearbyPanelOpen] = useState(false)
+  const [nearbyRadius, setNearbyRadius]       = useState(10)
+  const [nearbyPins, setNearbyPins]           = useState([])
 
-  // ★ 追加：GPS・住所検索用 state
-  const [gpsLoading, setGpsLoading] = useState(false)
-  const [gpsError, setGpsError] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchError, setSearchError] = useState('')
+  // user が変わったら ref に反映
+  useEffect(() => { userRef.current = user }, [user])
 
-  // ★ UIリニューアル：フローティングバーの検索欄展開フラグ
-  const [searchExpanded, setSearchExpanded] = useState(false)    // 検索欄の開閉
-  const searchInputRef = useRef(null)                             // 展開後にフォーカスを当てるref
-
-  // ★ 追加：周辺ピン一覧パネル用 state
-  const [gpsLatLng, setGpsLatLng] = useState(null)               // GPS取得済み座標
-  const [nearbyPanelOpen, setNearbyPanelOpen] = useState(false)  // パネルの開閉
-  const [nearbyRadius, setNearbyRadius] = useState(10)            // 検索範囲km（デフォルト10km）
-  const [nearbyPins, setNearbyPins] = useState([])                // 範囲内ピン一覧
-
-  useEffect(() => {
-    userRef.current = user
-  }, [user])
-
+  // 地図初期化（マウント時1回だけ）
   useEffect(() => {
     if (mapInstanceRef.current) return
 
@@ -104,23 +108,18 @@ function MapPage({ user, activeFilter, onMapReady }) {
 
     map.on('click', (e) => {
       if (!userRef.current) return
-      setRiderCard(null)
-      setRiderProfile(null)
-      setClickedLatLng(e.latlng)
-      setComment('')
-      setPinType('now')
-      setCategory('other')
-      setSelectedImages([null, null])
-      setConvertToVisited(false) // ★ 追加：リセット
-      setStep(1)                 // ★ 追加：ステップリセット
+      setRiderCard(null); setRiderProfile(null)
+      setClickedLatLng(e.latlng); setComment('')
+      setPinType('now'); setCategory('other')
+      setSelectedImages([null, null]); setConvertToVisited(false); setStep(1)
     })
 
     mapInstanceRef.current = map
     loadPins(map)
-
     if (onMapReady) onMapReady(map)
   }, [])
 
+  // カテゴリフィルター切り替え
   useEffect(() => {
     if (!clusterGroupRef.current) return
     markersRef.current.forEach(({ marker, pin }) => {
@@ -132,12 +131,14 @@ function MapPage({ user, activeFilter, onMapReady }) {
     })
   }, [activeFilter])
 
-  // ★ 追加：nearbyRadius が変わったとき、パネルが開いていれば再計算
+  // nearbyRadius が変わったとき、パネルが開いていれば再計算
   useEffect(() => {
-    if (nearbyPanelOpen && gpsLatLng) {
-      calcNearbyPins(gpsLatLng, nearbyRadius)
-    }
+    if (nearbyPanelOpen && gpsLatLng) calcNearbyPins(gpsLatLng, nearbyRadius)
   }, [nearbyRadius])
+
+  // ────────────────────────────────────────
+  // 地図・ピン操作
+  // ────────────────────────────────────────
 
   async function loadPins(map) {
     const now = new Date().toISOString()
@@ -148,9 +149,9 @@ function MapPage({ user, activeFilter, onMapReady }) {
   }
 
   function addPinToMap(map, pin) {
-    const color = PIN_COLORS[pin.type] || '#888888'
-    const cat = CATEGORIES.find(c => c.key === pin.category)
-    const icon = createColorPin(color, cat ? cat.emoji : '')
+    const color  = PIN_COLORS[pin.type] || '#888888'
+    const cat    = CATEGORIES.find(c => c.key === pin.category)
+    const icon   = createColorPin(color, cat ? cat.emoji : '')
     const marker = L.marker([pin.lat, pin.lng], { icon })
     marker.on('click', (e) => {
       L.DomEvent.stopPropagation(e)
@@ -168,6 +169,10 @@ function MapPage({ user, activeFilter, onMapReady }) {
     if (error) { setRiderProfile({}); return }
     setRiderProfile(profile)
   }
+
+  // ────────────────────────────────────────
+  // 投稿パネル操作
+  // ────────────────────────────────────────
 
   function handleImageSelect(index, e) {
     const file = e.target.files?.[0]
@@ -189,15 +194,12 @@ function MapPage({ user, activeFilter, onMapReady }) {
     for (let i = 0; i < selectedImages.length; i++) {
       const file = selectedImages[i]
       if (!file) continue
-      const ext = file.name.split('.').pop()
+      const ext      = file.name.split('.').pop()
       const fileName = `${userId}_${Date.now()}_${i}.${ext}`
       const { error } = await supabase.storage
-        .from('pin-images')
-        .upload(fileName, file, { upsert: true })
+        .from('pin-images').upload(fileName, file, { upsert: true })
       if (error) { console.error('画像アップロードエラー:', error); continue }
-      const { data: urlData } = supabase.storage
-        .from('pin-images')
-        .getPublicUrl(fileName)
+      const { data: urlData } = supabase.storage.from('pin-images').getPublicUrl(fileName)
       urls.push(urlData.publicUrl)
     }
     return urls.length > 0 ? urls : null
@@ -206,9 +208,7 @@ function MapPage({ user, activeFilter, onMapReady }) {
   async function postPin() {
     if (!clickedLatLng || !userRef.current) return
     setPosting(true)
-
     const imageUrls = await uploadImages(userRef.current.id)
-
     let expiresAt = null
     if (pinType === 'now') {
       const expires = new Date()
@@ -220,25 +220,24 @@ function MapPage({ user, activeFilter, onMapReady }) {
       lat: clickedLatLng.lat, lng: clickedLatLng.lng,
       type: pinType, comment, category, expires_at: expiresAt,
       image_urls: imageUrls,
-      convert_to_visited: convertToVisited, // ★ 追加
+      convert_to_visited: convertToVisited,
     }).select().single()
     if (error) { console.error('投稿エラー:', error); setPosting(false); return }
     addPinToMap(mapInstanceRef.current, data)
-    setClickedLatLng(null); setComment(''); setSelectedImages([null, null]); setConvertToVisited(false); setStep(1); setPosting(false)
+    setClickedLatLng(null); setComment(''); setSelectedImages([null, null])
+    setConvertToVisited(false); setStep(1); setPosting(false)
   }
+
+  // ────────────────────────────────────────
+  // ライダーカード操作
+  // ────────────────────────────────────────
 
   async function deletePin() {
     if (!riderCard) return
     const ok = window.confirm('本当に削除しますか？')
     if (!ok) return
-
-    const { error } = await supabase
-      .from('pins')
-      .delete()
-      .eq('id', riderCard.id)
-
+    const { error } = await supabase.from('pins').delete().eq('id', riderCard.id)
     if (error) { console.error('削除エラー:', error); return }
-
     markersRef.current = markersRef.current.filter(({ marker, pin }) => {
       if (pin.id === riderCard.id) {
         clusterGroupRef.current.removeLayer(marker)
@@ -246,35 +245,27 @@ function MapPage({ user, activeFilter, onMapReady }) {
       }
       return true
     })
-
-    setRiderCard(null)
-    setRiderProfile(null)
+    setRiderCard(null); setRiderProfile(null)
   }
 
-  // ★ 追加：GPS現在地取得
+  // ────────────────────────────────────────
+  // GPS・住所検索
+  // ────────────────────────────────────────
+
   function handleGps() {
     if (!userRef.current) return
-    if (!navigator.geolocation) {
-      setGpsError('このブラウザはGPSに対応していません')
-      return
-    }
-    setGpsLoading(true)
-    setGpsError('')
+    if (!navigator.geolocation) { setGpsError('このブラウザはGPSに対応していません'); return }
+    setGpsLoading(true); setGpsError('')
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const latlng = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         mapInstanceRef.current?.flyTo([latlng.lat, latlng.lng], 15)
-        setRiderCard(null)
-        setRiderProfile(null)
-        setClickedLatLng(latlng)
-        setComment('')
-        setPinType('now')
-        setCategory('other')
-        setSelectedImages([null, null])
-        setConvertToVisited(false)
-        setStep(1)
+        setRiderCard(null); setRiderProfile(null)
+        setClickedLatLng(latlng); setComment('')
+        setPinType('now'); setCategory('other')
+        setSelectedImages([null, null]); setConvertToVisited(false); setStep(1)
         setGpsLoading(false)
-        setGpsLatLng(latlng) // ★ 追加：GPS座標を保存して「周辺を見る」ボタンを表示
+        setGpsLatLng(latlng)
       },
       (err) => {
         setGpsLoading(false)
@@ -286,36 +277,26 @@ function MapPage({ user, activeFilter, onMapReady }) {
     )
   }
 
-  // ★ 追加：住所検索（Photon API）
   async function handleSearch(e) {
     e.preventDefault()
     if (!searchQuery.trim()) return
     if (!userRef.current) return
-    setSearchLoading(true)
-    setSearchError('')
+    setSearchLoading(true); setSearchError('')
     try {
       const encoded = encodeURIComponent(searchQuery.trim())
-      const res = await fetch(
-        `https://photon.komoot.io/api/?q=${encoded}&limit=1&lang=ja`
-      )
+      const res     = await fetch(`https://photon.komoot.io/api/?q=${encoded}&limit=1&lang=ja`)
       const results = await res.json()
       if (!results || !results.features || results.features.length === 0) {
         setSearchError('見つかりませんでした。別の地名をお試しください')
-        setSearchLoading(false)
-        return
+        setSearchLoading(false); return
       }
       const [lng, lat] = results.features[0].geometry.coordinates
       const latlng = { lat, lng }
       mapInstanceRef.current?.flyTo([latlng.lat, latlng.lng], 15)
-      setRiderCard(null)
-      setRiderProfile(null)
-      setClickedLatLng(latlng)
-      setComment('')
-      setPinType('now')
-      setCategory('other')
-      setSelectedImages([null, null])
-      setConvertToVisited(false)
-      setStep(1)
+      setRiderCard(null); setRiderProfile(null)
+      setClickedLatLng(latlng); setComment('')
+      setPinType('now'); setCategory('other')
+      setSelectedImages([null, null]); setConvertToVisited(false); setStep(1)
       setSearchQuery('')
     } catch {
       setSearchError('通信エラーが発生しました')
@@ -323,7 +304,21 @@ function MapPage({ user, activeFilter, onMapReady }) {
     setSearchLoading(false)
   }
 
-  // ★ 追加：周辺ピンをHaversineで距離計算して絞り込む
+  function handleSearchToggle() {
+    if (!userRef.current) return
+    const next = !searchExpanded
+    setSearchExpanded(next); setSearchError('')
+    if (next) {
+      setTimeout(() => searchInputRef.current?.focus(), 50)
+    } else {
+      setSearchQuery('')
+    }
+  }
+
+  // ────────────────────────────────────────
+  // 周辺ピン一覧
+  // ────────────────────────────────────────
+
   function calcNearbyPins(origin, radiusKm) {
     const result = markersRef.current
       .map(({ pin }) => ({
@@ -335,800 +330,99 @@ function MapPage({ user, activeFilter, onMapReady }) {
     setNearbyPins(result)
   }
 
-  // ★ 追加：「周辺のピンを見る」ボタン押下
   function handleOpenNearby() {
     if (!gpsLatLng) return
     calcNearbyPins(gpsLatLng, nearbyRadius)
     setNearbyPanelOpen(true)
   }
 
-  // ★ 追加：周辺パネルのピン行クリック → 地図ジャンプ＋ライダーカードを開く
   function handleNearbyPinClick(pin) {
     mapInstanceRef.current?.flyTo([pin.lat, pin.lng], 16)
-    setNearbyPanelOpen(false)
-    setClickedLatLng(null)
+    setNearbyPanelOpen(false); setClickedLatLng(null)
     openRiderCard(pin)
   }
 
-  // ★ 追加：距離を読みやすい文字列に変換（例：300m / 12.5km）
-  function formatDist(km) {
-    return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`
-  }
+  // ────────────────────────────────────────
+  // 描画
+  // ────────────────────────────────────────
 
-  const currentColor = PIN_COLORS[pinType]
-  const cardType = riderCard ? PIN_TYPES.find(t => t.key === riderCard.type) : null
-  const cardColor = riderCard ? (PIN_COLORS[riderCard.type] || '#888') : '#888'
-  const cardCat = riderCard ? CATEGORIES.find(c => c.key === riderCard.category) : null
-  const isMyPin = riderCard && user && riderCard.user_id === user.id
+  const showBottomBar = !clickedLatLng && !riderCard
 
   return (
     <>
+      {/* 地図本体 */}
       <div ref={mapRef} style={{ width: '100%', height: '100vh' }} />
 
-      {/* ★ UIリニューアル：下部フローティングバー（投稿パネル・ライダーカードが開いているときは非表示） */}
-      {!clickedLatLng && !riderCard && (
-        <div style={{
-          position: 'fixed',
-          bottom: '24px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 1000,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '6px',
-          fontFamily: 'sans-serif',
-        }}>
-          {/* エラートースト（GPS / 住所検索） */}
-          {(gpsError || searchError) && (
-            <div style={{
-              background: 'rgba(20,20,20,0.92)',
-              color: '#ff6b6b',
-              fontSize: '12px',
-              padding: '7px 14px',
-              borderRadius: '20px',
-              lineHeight: '1.4',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-              whiteSpace: 'nowrap',
-            }}>
-              {gpsError || searchError}
-            </div>
-          )}
-
-          {/* 検索欄（searchExpanded のときだけ表示） */}
-          {searchExpanded && (
-            <form
-              onSubmit={(e) => {
-                handleSearch(e)
-                setSearchExpanded(false)
-              }}
-              style={{ display: 'flex', gap: '0' }}
-            >
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setSearchError('') }}
-                onKeyDown={(e) => { if (e.key === 'Escape') { setSearchExpanded(false); setSearchQuery('') } }}
-                placeholder="地名・施設名を入力して Enter"
-                autoFocus
-                style={{
-                  width: '240px',
-                  height: '40px',
-                  padding: '0 12px',
-                  borderRadius: '20px 0 0 20px',
-                  border: '1.5px solid rgba(255,255,255,0.2)',
-                  borderRight: 'none',
-                  background: 'rgba(20,20,20,0.92)',
-                  backdropFilter: 'blur(10px)',
-                  color: 'white',
-                  fontSize: '13px',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-                }}
-              />
-              <button
-                type="submit"
-                disabled={searchLoading}
-                style={{
-                  width: '44px',
-                  height: '40px',
-                  borderRadius: '0 20px 20px 0',
-                  border: '1.5px solid rgba(255,255,255,0.2)',
-                  background: 'rgba(20,20,20,0.92)',
-                  backdropFilter: 'blur(10px)',
-                  color: searchLoading ? '#666' : 'white',
-                  fontSize: '15px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
-                  flexShrink: 0,
-                }}
-              >
-                {searchLoading ? '…' : '🔍'}
-              </button>
-            </form>
-          )}
-
-          {/* メインバー：3ボタン横並び */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px',
-            background: 'rgba(20,20,20,0.88)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: '40px',
-            padding: '6px 8px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.55)',
-          }}>
-
-            {/* ① 現在地ボタン */}
-            <button
-              onClick={handleGps}
-              disabled={gpsLoading || !user}
-              title={user ? '現在地を取得' : 'ログインが必要です'}
-              style={{
-                height: '38px',
-                padding: '0 16px',
-                borderRadius: '30px',
-                border: 'none',
-                background: gpsLoading ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.1)',
-                color: (!user || gpsLoading) ? '#555' : 'white',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                cursor: (!user || gpsLoading) ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={e => { if (user && !gpsLoading) e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = gpsLoading ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.1)' }}
-            >
-              {gpsLoading ? '取得中…' : '📍 現在地'}
-            </button>
-
-            {/* セパレーター */}
-            <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-
-            {/* ② 場所を検索ボタン（タップで入力欄展開） */}
-            <button
-              onClick={() => {
-                if (!user) return
-                setSearchExpanded(v => !v)
-                setSearchError('')
-                if (!searchExpanded) {
-                  // 展開時：次のレンダー後にフォーカス（autoFocusで対応済みだが念のため）
-                  setTimeout(() => searchInputRef.current?.focus(), 50)
-                } else {
-                  setSearchQuery('')
-                }
-              }}
-              disabled={!user}
-              title={user ? '場所・施設名を検索' : 'ログインが必要です'}
-              style={{
-                height: '38px',
-                padding: '0 16px',
-                borderRadius: '30px',
-                border: 'none',
-                background: searchExpanded ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.1)',
-                color: !user ? '#555' : 'white',
-                fontSize: '13px',
-                fontWeight: searchExpanded ? 'bold' : 'normal',
-                cursor: !user ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={e => { if (user) e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = searchExpanded ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.1)' }}
-            >
-              🔍 {searchExpanded ? '閉じる' : '場所を検索'}
-            </button>
-
-            {/* セパレーター */}
-            <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-
-            {/* ③ 周辺を見るボタン（GPS未取得時はグレーアウト） */}
-            <button
-              onClick={handleOpenNearby}
-              disabled={!gpsLatLng}
-              title={gpsLatLng ? '現在地周辺のピンを一覧表示' : '先に現在地を取得してください'}
-              style={{
-                height: '38px',
-                padding: '0 16px',
-                borderRadius: '30px',
-                border: 'none',
-                background: 'rgba(255,255,255,0.1)',
-                color: gpsLatLng ? 'white' : '#555',
-                fontSize: '13px',
-                fontWeight: 'normal',
-                cursor: gpsLatLng ? 'pointer' : 'not-allowed',
-                whiteSpace: 'nowrap',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={e => { if (gpsLatLng) e.currentTarget.style.background = 'rgba(255,255,255,0.18)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }}
-            >
-              📡 周辺を見る
-            </button>
-          </div>
-        </div>
+      {/* 下部フローティングバー */}
+      {showBottomBar && (
+        <BottomBar
+          user={user}
+          gpsLoading={gpsLoading}
+          gpsError={gpsError}
+          searchQuery={searchQuery}
+          searchLoading={searchLoading}
+          searchError={searchError}
+          searchExpanded={searchExpanded}
+          searchInputRef={searchInputRef}
+          gpsLatLng={gpsLatLng}
+          onGps={handleGps}
+          onSearchChange={(val) => { setSearchQuery(val); setSearchError('') }}
+          onSearchSubmit={(e) => { handleSearch(e); setSearchExpanded(false) }}
+          onSearchToggle={handleSearchToggle}
+          onOpenNearby={handleOpenNearby}
+        />
       )}
 
-      {/* ★ 追加：周辺ピン一覧パネル（右からスライドイン） */}
-      {nearbyPanelOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          width: '320px',
-          height: '100vh',
-          background: '#141414',
-          borderLeft: '1px solid rgba(255,255,255,0.1)',
-          zIndex: 1100,
-          display: 'flex',
-          flexDirection: 'column',
-          fontFamily: 'sans-serif',
-          boxShadow: '-8px 0 32px rgba(0,0,0,0.6)',
-          animation: 'slideInRight 0.22s ease',
-        }}>
-          {/* CSSアニメーション定義 */}
-          <style>{`
-            @keyframes slideInRight {
-              from { transform: translateX(100%); opacity: 0; }
-              to   { transform: translateX(0);    opacity: 1; }
-            }
-          `}</style>
+      {/* 周辺ピン一覧パネル */}
+      <NearbyPanel
+        nearbyPanelOpen={nearbyPanelOpen}
+        nearbyPins={nearbyPins}
+        nearbyRadius={nearbyRadius}
+        onClose={() => setNearbyPanelOpen(false)}
+        onRadiusChange={setNearbyRadius}
+        onPinClick={handleNearbyPinClick}
+      />
 
-          {/* パネルヘッダー */}
-          <div style={{
-            padding: '16px 16px 12px',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexShrink: 0,
-          }}>
-            <div>
-              <div style={{ color: 'white', fontWeight: 'bold', fontSize: '15px' }}>
-                📡 周辺のピン
-              </div>
-              <div style={{ color: '#666', fontSize: '11px', marginTop: '2px' }}>
-                現在地から{nearbyRadius}km以内・{nearbyPins.length}件
-              </div>
-            </div>
-            <button
-              onClick={() => setNearbyPanelOpen(false)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#888',
-                fontSize: '20px',
-                cursor: 'pointer',
-                lineHeight: 1,
-                padding: '4px',
-              }}
-            >✕</button>
-          </div>
+      {/* ライダーカード */}
+      <RiderCard
+        riderCard={riderCard}
+        riderProfile={riderProfile}
+        user={user}
+        onClose={() => { setRiderCard(null); setRiderProfile(null) }}
+        onDelete={deletePin}
+        onPhotoClick={(urls, index) => setPhotoModal({ urls, index })}
+      />
 
-          {/* 範囲切り替えボタン */}
-          <div style={{
-            padding: '10px 16px',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-            display: 'flex',
-            gap: '6px',
-            flexShrink: 0,
-          }}>
-            {[5, 10, 20].map((km) => (
-              <button
-                key={km}
-                onClick={() => setNearbyRadius(km)}
-                style={{
-                  flex: 1,
-                  padding: '6px 0',
-                  borderRadius: '20px',
-                  border: nearbyRadius === km
-                    ? '1px solid white'
-                    : '1px solid rgba(255,255,255,0.2)',
-                  background: nearbyRadius === km ? 'white' : 'transparent',
-                  color: nearbyRadius === km ? '#111' : '#aaa',
-                  fontSize: '12px',
-                  fontWeight: nearbyRadius === km ? 'bold' : 'normal',
-                  cursor: 'pointer',
-                }}
-              >
-                {km}km
-              </button>
-            ))}
-          </div>
+      {/* 写真モーダル */}
+      <PhotoModal
+        photoModal={photoModal}
+        setPhotoModal={setPhotoModal}
+      />
 
-          {/* ピン一覧（スクロール可能） */}
-          <div style={{ overflowY: 'auto', flex: 1 }}>
-            {nearbyPins.length === 0 ? (
-              <div style={{
-                padding: '40px 16px',
-                textAlign: 'center',
-                color: '#555',
-                fontSize: '13px',
-                lineHeight: '1.6',
-              }}>
-                この範囲にピンはありません<br />
-                <span style={{ fontSize: '11px' }}>範囲を広げてみてください</span>
-              </div>
-            ) : (
-              nearbyPins.map((pin) => {
-                const cat     = CATEGORIES.find(c => c.key === pin.category)
-                const pinType = PIN_TYPES.find(t => t.key === pin.type)
-                const color   = PIN_COLORS[pin.type] || '#888'
-                return (
-                  <div
-                    key={pin.id}
-                    onClick={() => handleNearbyPinClick(pin)}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    style={{
-                      padding: '12px 16px',
-                      borderBottom: '1px solid rgba(255,255,255,0.05)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '10px',
-                    }}
-                  >
-                    {/* カテゴリ絵文字（丸アイコン） */}
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: `${color}22`,
-                      border: `1px solid ${color}55`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '16px',
-                      flexShrink: 0,
-                    }}>
-                      {cat ? cat.emoji : '📍'}
-                    </div>
+      {/* 投稿パネル */}
+      <PostPanel
+        clickedLatLng={clickedLatLng}
+        step={step}
+        pinType={pinType}
+        category={category}
+        comment={comment}
+        convertToVisited={convertToVisited}
+        selectedImages={selectedImages}
+        posting={posting}
+        fileInputRefs={fileInputRefs}
+        onCancel={() => setClickedLatLng(null)}
+        onNextStep={() => setStep(2)}
+        onPrevStep={() => setStep(1)}
+        onPinTypeChange={(key) => { setPinType(key); if (key !== 'now') setConvertToVisited(false) }}
+        onCategoryChange={setCategory}
+        onCommentChange={setComment}
+        onConvertChange={setConvertToVisited}
+        onImageSelect={handleImageSelect}
+        onImageRemove={handleImageRemove}
+        onPost={postPin}
+      />
 
-                    {/* 右側の情報 */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {/* 1行目：カテゴリ名 ＋ 距離 */}
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '4px',
-                      }}>
-                        <span style={{ color: 'white', fontSize: '13px', fontWeight: 'bold' }}>
-                          {cat ? cat.label : 'その他'}
-                        </span>
-                        <span style={{ color: '#FF4500', fontSize: '12px', fontWeight: 'bold', flexShrink: 0, marginLeft: '6px' }}>
-                          {formatDist(pin.distKm)}
-                        </span>
-                      </div>
-
-                      {/* 2行目：ピン種類バッジ */}
-                      {pinType && (
-                        <span style={{
-                          display: 'inline-block',
-                          fontSize: '10px',
-                          color: color,
-                          border: `1px solid ${color}`,
-                          borderRadius: '10px',
-                          padding: '1px 7px',
-                          marginBottom: pin.comment ? '4px' : '0',
-                        }}>
-                          {pinType.label}
-                        </span>
-                      )}
-
-                      {/* 3行目：コメント（あれば） */}
-                      {pin.comment && (
-                        <div style={{
-                          color: '#999',
-                          fontSize: '12px',
-                          marginTop: '2px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          💬 {pin.comment}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── ライダーカード ── */}
-      {riderCard && (
-        <div style={{
-          position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-          background: '#1a1a1a', border: `1px solid ${cardColor}44`,
-          borderRadius: '16px', padding: '20px 24px',
-          zIndex: 1000, width: '320px', fontFamily: 'sans-serif', color: 'white',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-        }}>
-          <button onClick={() => { setRiderCard(null); setRiderProfile(null) }}
-            style={{ position: 'absolute', top: '12px', right: '12px', background: 'transparent', border: 'none', color: '#888', fontSize: '18px', cursor: 'pointer' }}
-          >✕</button>
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
-            <div style={{ background: `${cardColor}22`, border: `1px solid ${cardColor}`, color: cardColor, borderRadius: '20px', padding: '3px 12px', fontSize: '12px', fontWeight: 'bold' }}>
-              {cardType ? cardType.label : riderCard.type}
-            </div>
-            {cardCat && (
-              <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#ccc', borderRadius: '20px', padding: '3px 12px', fontSize: '12px' }}>
-                {cardCat.emoji} {cardCat.label}
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <div style={{
-              width: '44px', height: '44px', borderRadius: '50%',
-              background: riderProfile === null ? 'rgba(255,255,255,0.1)' : cardColor,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '20px', flexShrink: 0,
-              border: `2px solid ${cardColor}`,
-              overflow: 'hidden',
-            }}>
-              {riderProfile === null ? null
-                : riderProfile.avatar_url
-                  ? <img src={riderProfile.avatar_url} alt="アイコン"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : '🏍️'
-              }
-            </div>
-            <div>
-              <div style={{ fontWeight: 'bold', fontSize: '15px' }}>
-                {riderProfile === null ? '読み込み中...' : (riderProfile.username || 'ライダー')}
-              </div>
-              {riderProfile?.bike_model && (
-                <div style={{ fontSize: '12px', color: '#aaa', marginTop: '2px' }}>🏍️ {riderProfile.bike_model}</div>
-              )}
-              <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>
-                {new Date(riderCard.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-          </div>
-          {riderCard.comment && (
-            <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px 14px', fontSize: '14px', color: '#ddd', lineHeight: '1.5' }}>
-              💬 {riderCard.comment}
-            </div>
-          )}
-
-          {/* ★ 変更：<a>タグ → クリックでモーダルを開く */}
-          {riderCard.image_urls && riderCard.image_urls.length > 0 && (
-            <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
-              {riderCard.image_urls.map((url, i) => (
-                <div
-                  key={i}
-                  onClick={() => setPhotoModal({ urls: riderCard.image_urls, index: i })}
-                  style={{ flex: 1, height: '120px', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }}
-                >
-                  <img src={url} alt={`写真${i + 1}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ fontSize: '11px', color: '#555', marginTop: '10px', textAlign: 'right' }}>
-            {riderCard.lat.toFixed(4)}, {riderCard.lng.toFixed(4)}
-          </div>
-          {isMyPin && (
-            <button onClick={deletePin} style={{
-              marginTop: '12px',
-              width: '100%',
-              padding: '8px',
-              borderRadius: '8px',
-              border: '1px solid rgba(255, 59, 48, 0.4)',
-              background: 'rgba(255, 59, 48, 0.15)',
-              color: 'rgba(255, 59, 48, 0.8)',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontFamily: 'sans-serif',
-            }}>🗑️ このピンを削除</button>
-          )}
-        </div>
-      )}
-
-      {/* ★ 写真モーダル */}
-      {photoModal && (
-        // 背景（クリックで閉じる）
-        <div
-          onClick={() => setPhotoModal(null)}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.88)',
-            zIndex: 2000,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'sans-serif',
-          }}
-        >
-          {/* 中央コンテンツ（クリックが背景に伝わらないよう stopPropagation） */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ position: 'relative', maxWidth: '90vw', maxHeight: '80vh' }}
-          >
-            {/* 写真 */}
-            <img
-              src={photoModal.urls[photoModal.index]}
-              alt={`写真${photoModal.index + 1}`}
-              style={{
-                maxWidth: '90vw', maxHeight: '80vh',
-                borderRadius: '12px', display: 'block',
-                objectFit: 'contain',
-              }}
-            />
-
-            {/* ✕ 閉じるボタン */}
-            <button
-              onClick={() => setPhotoModal(null)}
-              style={{
-                position: 'absolute', top: '-14px', right: '-14px',
-                width: '32px', height: '32px',
-                borderRadius: '50%', border: 'none',
-                background: 'rgba(255,255,255,0.15)',
-                color: 'white', fontSize: '16px',
-                cursor: 'pointer', display: 'flex',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >✕</button>
-
-            {/* 左矢印ボタン（1枚目は非表示） */}
-            {photoModal.urls.length > 1 && photoModal.index > 0 && (
-              <button
-                onClick={() => setPhotoModal(m => ({ ...m, index: m.index - 1 }))}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
-                style={{
-                  position: 'absolute', left: '8px', top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: '48px', height: '48px',
-                  borderRadius: '50%', border: 'none',
-                  background: 'rgba(0,0,0,0.5)',
-                  color: 'white', fontSize: '24px',
-                  cursor: 'pointer', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >‹</button>
-            )}
-
-            {/* 右矢印ボタン（最後の枚は非表示） */}
-            {photoModal.urls.length > 1 && photoModal.index < photoModal.urls.length - 1 && (
-              <button
-                onClick={() => setPhotoModal(m => ({ ...m, index: m.index + 1 }))}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.8)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
-                style={{
-                  position: 'absolute', right: '8px', top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: '48px', height: '48px',
-                  borderRadius: '50%', border: 'none',
-                  background: 'rgba(0,0,0,0.5)',
-                  color: 'white', fontSize: '24px',
-                  cursor: 'pointer', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >›</button>
-            )}
-
-            {/* 枚数カウンター（画像下部中央・14px） */}
-            {photoModal.urls.length > 1 && (
-              <div style={{
-                position: 'absolute', bottom: '-32px', left: '50%',
-                transform: 'translateX(-50%)',
-                color: 'rgba(255,255,255,0.7)', fontSize: '14px',
-                whiteSpace: 'nowrap',
-              }}>
-                {photoModal.index + 1} / {photoModal.urls.length}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      {/* ── 投稿パネル ── */}
-      {clickedLatLng && (
-        <div style={{
-          position: 'fixed', bottom: '0', left: '50%', transform: 'translateX(-50%)',
-          background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.15)',
-          borderRadius: '16px 16px 0 0', padding: '16px 24px 32px',
-          zIndex: 1000, width: '360px', fontFamily: 'sans-serif', color: 'white',
-          boxShadow: '0 -8px 32px rgba(0,0,0,0.5)',
-          maxHeight: '85vh', overflowY: 'auto',
-        }}>
-          {/* ドラッグバー */}
-          <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', margin: '0 auto 12px' }} />
-
-          {/* ステップインジケーター */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginBottom: '16px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'white' }} />
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: step === 2 ? 'white' : 'rgba(255,255,255,0.3)' }} />
-          </div>
-
-          {/* ── ステップ1：ピンの種類 ── */}
-          {step === 1 && (
-            <>
-              <div style={{ marginBottom: '14px' }}>
-                <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>ピンの種類</div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  {PIN_TYPES.map((type) => {
-                    const isSelected = pinType === type.key
-                    return (
-                      <button key={type.key} onClick={() => {
-                        setPinType(type.key)
-                        if (type.key !== 'now') setConvertToVisited(false)
-                      }} style={{
-                        flex: 1, padding: '8px 4px', borderRadius: '8px',
-                        border: isSelected ? `2px solid ${PIN_COLORS[type.key]}` : '2px solid rgba(255,255,255,0.15)',
-                        background: isSelected ? `${PIN_COLORS[type.key]}22` : 'transparent',
-                        color: 'white', cursor: 'pointer', fontSize: '11px', textAlign: 'center', lineHeight: '1.4',
-                      }}>{type.label}</button>
-                    )
-                  })}
-                </div>
-                <div style={{ fontSize: '11px', color: '#888', marginTop: '6px', textAlign: 'center' }}>
-                  {PIN_TYPES.find(t => t.key === pinType)?.desc}
-                </div>
-              </div>
-
-              {/* 24時間後どうする？（アニメーションで展開） */}
-              <div style={{
-                overflow: 'hidden',
-                maxHeight: pinType === 'now' ? '120px' : '0px',
-                opacity: pinType === 'now' ? 1 : 0,
-                transition: 'max-height 0.3s ease, opacity 0.3s ease',
-                marginBottom: pinType === 'now' ? '14px' : '0px',
-              }}>
-                <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>24時間後どうする？</div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    onClick={() => setConvertToVisited(false)}
-                    style={{
-                      flex: 1, padding: '8px 4px', borderRadius: '8px',
-                      border: !convertToVisited ? '2px solid rgba(255,255,255,0.6)' : '2px solid rgba(255,255,255,0.15)',
-                      background: !convertToVisited ? 'rgba(255,255,255,0.15)' : 'transparent',
-                      color: 'white', cursor: 'pointer', fontSize: '11px', textAlign: 'center', lineHeight: '1.4',
-                    }}
-                  >そのまま消える</button>
-                  <button
-                    onClick={() => setConvertToVisited(true)}
-                    style={{
-                      flex: 1, padding: '8px 4px', borderRadius: '8px',
-                      border: convertToVisited ? '2px solid #00C853' : '2px solid rgba(255,255,255,0.15)',
-                      background: convertToVisited ? '#00C85322' : 'transparent',
-                      color: 'white', cursor: 'pointer', fontSize: '11px', textAlign: 'center', lineHeight: '1.4',
-                    }}
-                  >訪問済みに変換する</button>
-                </div>
-              </div>
-
-              {/* キャンセル＋次へボタン */}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => setClickedLatLng(null)} style={{
-                  flex: 1, padding: '10px', borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.2)', background: 'transparent',
-                  color: 'white', cursor: 'pointer', fontSize: '14px',
-                }}>キャンセル</button>
-                <button onClick={() => setStep(2)} style={{
-                  flex: 2, padding: '10px', borderRadius: '8px', border: 'none',
-                  background: currentColor, color: 'white',
-                  cursor: 'pointer', fontSize: '14px', fontWeight: 'bold',
-                }}>次へ →</button>
-              </div>
-            </>
-          )}
-
-          {/* ── ステップ2：詳細入力 ── */}
-          {step === 2 && (
-            <>
-              <div style={{ marginBottom: '14px' }}>
-                <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>カテゴリ</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {CATEGORIES.map((cat) => {
-                    const isSelected = category === cat.key
-                    return (
-                      <button key={cat.key} onClick={() => setCategory(cat.key)} style={{
-                        padding: '5px 10px', borderRadius: '20px',
-                        border: isSelected ? '1px solid white' : '1px solid rgba(255,255,255,0.2)',
-                        background: isSelected ? 'white' : 'transparent',
-                        color: isSelected ? '#111' : '#aaa',
-                        cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap',
-                      }}>{cat.emoji} {cat.label}</button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <input type="text" placeholder="一言コメント（任意）" value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                style={{
-                  width: '100%', padding: '8px 12px', borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.05)',
-                  color: 'white', fontSize: '14px', marginBottom: '12px', boxSizing: 'border-box',
-                }}
-              />
-
-              {/* 写真選択エリア */}
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>📷 写真を追加（最大2枚）</div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {[0, 1].map((index) => {
-                    const file = selectedImages[index]
-                    const previewUrl = file ? URL.createObjectURL(file) : null
-                    return (
-                      <div key={index} style={{ position: 'relative' }}>
-                        <input
-                          ref={fileInputRefs[index]}
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          onChange={(e) => handleImageSelect(index, e)}
-                          style={{ display: 'none' }}
-                        />
-                        <div
-                          onClick={() => !file && fileInputRefs[index].current?.click()}
-                          style={{
-                            width: '80px', height: '80px',
-                            borderRadius: '8px',
-                            border: file ? 'none' : '2px dashed rgba(255,255,255,0.2)',
-                            background: file ? 'transparent' : 'rgba(255,255,255,0.03)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: file ? 'default' : 'pointer',
-                            overflow: 'hidden',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {previewUrl
-                            ? <img src={previewUrl} alt={`プレビュー${index + 1}`}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : <span style={{ fontSize: '24px', color: 'rgba(255,255,255,0.2)' }}>＋</span>
-                          }
-                        </div>
-                        {file && (
-                          <button
-                            onClick={() => handleImageRemove(index)}
-                            style={{
-                              position: 'absolute', top: '-6px', right: '-6px',
-                              width: '20px', height: '20px',
-                              borderRadius: '50%', border: 'none',
-                              background: 'rgba(0,0,0,0.8)',
-                              color: 'white', fontSize: '11px',
-                              cursor: 'pointer', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center',
-                              lineHeight: 1,
-                            }}
-                          >✕</button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => setStep(1)} style={{
-                  flex: 1, padding: '10px', borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.2)', background: 'transparent',
-                  color: 'white', cursor: 'pointer', fontSize: '14px',
-                }}>← 戻る</button>
-                <button onClick={postPin} disabled={posting} style={{
-                  flex: 2, padding: '10px', borderRadius: '8px', border: 'none',
-                  background: currentColor, color: 'white', cursor: 'pointer',
-                  fontSize: '14px', fontWeight: 'bold',
-                }}>{posting ? '投稿中...' : '投稿する'}</button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
+      {/* 未ログイン時のヒント */}
       {!user && (
         <div style={{
           position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
