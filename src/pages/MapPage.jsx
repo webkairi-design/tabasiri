@@ -217,12 +217,27 @@ function MapPage({ user, activeFilter, onMapReady }) {
       expires.setHours(expires.getHours() + 24)
       expiresAt = expires.toISOString()
     }
+    // 天気取得（失敗しても投稿は続行するため try-catch で握りつぶす）
+    let weatherCode = null
+    let temperature = null
+    try {
+      const weatherRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${clickedLatLng.lat}&longitude=${clickedLatLng.lng}&current_weather=true`
+      )
+      const weatherData = await weatherRes.json()
+      weatherCode = weatherData.current_weather.weathercode
+      temperature = weatherData.current_weather.temperature
+    } catch {
+      // 天気取得失敗は無視して投稿を続行
+    }
     const { data, error } = await supabase.from('pins').insert({
       user_id: userRef.current.id,
       lat: clickedLatLng.lat, lng: clickedLatLng.lng,
       type: pinType, comment, category, expires_at: expiresAt,
       image_urls: imageUrls,
       convert_to_visited: convertToVisited,
+      weather_code: weatherCode,
+      temperature,
     }).select().single()
     if (error) { console.error('投稿エラー:', error); setPosting(false); return }
     addPinToMap(mapInstanceRef.current, data)
