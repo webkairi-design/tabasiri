@@ -108,7 +108,10 @@ function MapPage({ user, activeFilter, onMapReady }) {
     clusterGroup.addTo(map)
     clusterGroupRef.current = clusterGroup
 
-    map.on('click', (e) => {
+    // デフォルトのダブルクリックズームを無効にする（dblclickで投稿パネルを開くため）
+    map.doubleClickZoom.disable()
+
+    map.on('dblclick', (e) => {
       if (!userRef.current) return
       setRiderCard(null); setRiderProfile(null)
       setClickedLatLng(e.latlng); setComment('')
