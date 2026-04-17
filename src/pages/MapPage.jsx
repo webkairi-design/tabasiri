@@ -119,6 +119,11 @@ function MapPage({ user, activeFilter, onMapReady }) {
       setSelectedImages([null, null]); setConvertToVisited(false); setStep(1)
     })
 
+    // シングルクリックで投稿パネルを閉じる（パネル外クリック検知）
+    map.on('click', () => {
+      setClickedLatLng(null)
+    })
+
     mapInstanceRef.current = map
     loadPins(map)
     if (onMapReady) onMapReady(map)
